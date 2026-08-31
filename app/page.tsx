@@ -93,7 +93,7 @@ type TensionEngine = {
 const DEFAULT_METRICS: VoiceMetrics = {
   tension: 32,
   energy: 68,
-  pace: 142,
+  pace: 7.2,
   stability: 82,
   confidence: 94,
   pitch: 176,
@@ -105,6 +105,7 @@ const clamp = (value: number, minimum = 0, maximum = 100) =>
   Math.min(maximum, Math.max(minimum, value));
 
 const round = (value: number) => Math.round(value);
+const roundOne = (value: number) => Math.round(value * 10) / 10;
 
 const mean = (values: number[]) =>
   values.length
@@ -138,20 +139,27 @@ const formatTime = (seconds: number) => {
   return `${minutes}:${rest}`;
 };
 
-function estimateWordUnits(text: string) {
-  const clean = text.trim();
+function estimateMoraUnits(text: string) {
+  const clean = text.normalize('NFKC').trim();
   if (!clean) return 0;
 
-  try {
-    const segmenter = new Intl.Segmenter('ja', { granularity: 'word' });
-    const segments = Array.from(segmenter.segment(clean));
-    const wordCount = segments.filter((segment) => segment.isWordLike).length;
-    if (wordCount) return wordCount;
-  } catch {
-    // Older browsers fall back to a Japanese-character approximation.
+  let units = 0;
+  for (const character of clean) {
+    if (/[ゃゅょャュョぁぃぅぇぉァィゥェォゎヮ]/u.test(character)) {
+      continue;
+    }
+    if (/[ぁ-ゖァ-ヺー]/u.test(character)) {
+      units += 1;
+      continue;
+    }
+    if (/[㐀-䶿一-鿿々]/u.test(character)) {
+      units += 2;
+      continue;
+    }
+    if (/[0-9]/u.test(character)) units += 1.5;
   }
 
-  return Math.max(1, clean.replace(/\s/g, '').length / 2.4);
+  return units;
 }
 
 function detectPitch(buffer: Float32Array, sampleRate: number) {
@@ -276,7 +284,7 @@ function createCoachFeedback(
     } as const;
   }
 
-  if (metrics.pace >= 178) {
+  if (metrics.pace >= 8.5) {
     return {
       label: '速め',
       message: '少しゆっくり話しましょう。',
@@ -635,7 +643,7 @@ export default function Home() {
           speaking &&
           rms > 0.015 &&
           rms > lastRmsRef.current * 1.08 &&
-          now - lastPeakAtRef.current > 150
+          now - lastPeakAtRef.current > 80
         ) {
           peakTimesRef.current.push(now);
           lastPeakAtRef.current = now;
@@ -690,29 +698,29 @@ export default function Home() {
           Math.min(10, (now - analysisStartedAtRef.current) / 1000),
         );
         const acousticPace = clamp(
-          (peakTimesRef.current.length / acousticWindow) * (60 / 2.1),
-          72,
-          220,
+          peakTimesRef.current.length / acousticWindow,
+          0,
+          12,
         );
-        const transcriptUnits = estimateWordUnits(transcriptRef.current);
-        const sessionMinutes = Math.max(
-          0.08,
-          (now - analysisStartedAtRef.current) / 60_000,
+        const transcriptUnits = estimateMoraUnits(transcriptRef.current);
+        const sessionSeconds = Math.max(
+          1,
+          (now - analysisStartedAtRef.current) / 1000,
         );
         const transcriptPace = clamp(
-          transcriptUnits / sessionMinutes,
-          65,
-          220,
+          transcriptUnits / sessionSeconds,
+          0,
+          12,
         );
         const pace =
-          transcriptUnits >= 4
+          transcriptUnits >= 12
             ? transcriptPace * 0.68 + acousticPace * 0.32
             : acousticPace;
 
         const voiceRatio =
           voiceWindowRef.current.filter(Boolean).length /
           Math.max(1, voiceWindowRef.current.length);
-        const paceStress = clamp(34 + (pace - 125) * 0.8);
+        const paceStress = clamp(28 + (pace - 6) * 14);
         const pitchStress = clamp(
           34 + Math.max(0, semitoneShift) * 13 + jitter * 260,
         );
@@ -859,7 +867,7 @@ export default function Home() {
     const nextSummary: SessionSummary = {
       tension: round(averageOf('tension')),
       energy: round(averageOf('energy')),
-      pace: round(averageOf('pace')),
+      pace: roundOne(averageOf('pace')),
       stability: round(averageOf('stability')),
       duration: elapsed,
     };
@@ -903,9 +911,9 @@ export default function Home() {
         ? '標準'
         : '低い';
   const paceNote =
-    metrics.pace > 178
+    metrics.pace > 8
       ? '速め'
-      : metrics.pace < 95
+      : metrics.pace < 6
         ? 'ゆっくり'
         : '標準';
 
@@ -1075,10 +1083,10 @@ export default function Home() {
             />
             <MetricCard
               label="話すテンポ"
-              value={round(metrics.pace)}
-              unit="語/分・推定"
+              value={metrics.pace.toFixed(1)}
+              unit="モーラ/秒・推定"
               note={paceNote}
-              progress={((metrics.pace - 70) / 140) * 100}
+              progress={(metrics.pace / 10) * 100}
               color="bg-[#3c8b61]"
               track="bg-[#eceef1]"
             />
@@ -1145,7 +1153,7 @@ export default function Home() {
               <div className="summary-grid">
                 <div><span>平均緊張度</span><strong>{summary.tension}</strong><small>/100</small></div>
                 <div><span>声の熱量</span><strong>{summary.energy}</strong><small>/100</small></div>
-                <div><span>平均テンポ</span><strong>{summary.pace}</strong><small>語/分</small></div>
+                <div><span>平均テンポ</span><strong>{summary.pace}</strong><small>モーラ/秒</small></div>
                 <div><span>練習時間</span><strong>{formatTime(summary.duration)}</strong><small>min</small></div>
               </div>
 
@@ -1161,7 +1169,7 @@ export default function Home() {
                 <div className="summary-tip summary-next">
                   <div><Gauge aria-hidden="true" /><span>次のフォーカス</span></div>
                   <p>
-                    {summary.pace > 170
+                    {summary.pace > 8
                       ? '結論の直前に1秒の間を入れ、聞き手が追いつく余白をつくりましょう。'
                       : summary.tension > 65
                         ? '話し始める前に長く息を吐き、最初の一文をゆっくり届けましょう。'
