@@ -36,7 +36,6 @@ type SessionMode =
   | 'done'
   | 'error';
 
-type SessionKind = 'microphone' | 'demo' | null;
 type InputState = 'ready' | 'good' | 'silent' | 'loud';
 
 type VoiceMetrics = {
@@ -104,14 +103,6 @@ const DEFAULT_METRICS: VoiceMetrics = {
   jitter: 0.018,
   volume: -24,
 };
-
-const DEMO_SCRIPT = [
-  'みなさん、今日は聞き手に届く話し方についてお話しします。',
-  '伝えるときに大切なのは、情報の量だけではありません。',
-  '声のテンポと間が、聞き手の理解を大きく変えます。',
-  'ここで一度、ゆっくり深呼吸してみましょう。',
-  '自分らしい声で話すほど、メッセージはまっすぐ届きます。',
-];
 
 const clamp = (value: number, minimum = 0, maximum = 100) =>
   Math.min(maximum, Math.max(minimum, value));
@@ -361,7 +352,6 @@ function MetricCard({
 
 export default function Home() {
   const [mode, setMode] = useState<SessionMode>('idle');
-  const [sessionKind, setSessionKind] = useState<SessionKind>(null);
   const [metrics, setMetrics] =
     useState<VoiceMetrics>(DEFAULT_METRICS);
   const [waveform, setWaveform] = useState<number[]>(
@@ -385,7 +375,6 @@ export default function Home() {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const animationRef = useRef<number | null>(null);
-  const demoTimerRef = useRef<number | null>(null);
   const analysisStartedAtRef = useRef(0);
   const lastAnalysisAtRef = useRef(0);
   const lastVoiceAtRef = useRef(0);
@@ -412,11 +401,6 @@ export default function Home() {
     if (animationRef.current !== null) {
       window.cancelAnimationFrame(animationRef.current);
       animationRef.current = null;
-    }
-
-    if (demoTimerRef.current !== null) {
-      window.clearInterval(demoTimerRef.current);
-      demoTimerRef.current = null;
     }
 
     if (recognitionRef.current) {
@@ -572,7 +556,6 @@ export default function Home() {
   const startMicrophone = useCallback(async () => {
     cleanupEngines();
     prepareSession();
-    setSessionKind('microphone');
     changeMode('requesting');
 
     if (!window.isSecureContext && window.location.hostname !== 'localhost') {
@@ -839,7 +822,7 @@ export default function Home() {
           ? 'マイクが許可されていません。ブラウザのサイト設定でマイクを許可し、もう一度お試しください。'
           : errorName === 'NotFoundError'
             ? '利用できるマイクが見つかりません。マイクの接続とOSの設定を確認してください。'
-            : 'マイクを開始できませんでした。別のブラウザで試すか、デモモードをご利用ください。';
+            : 'マイクを開始できませんでした。ブラウザの設定を確認して、もう一度お試しください。';
       setErrorMessage(message);
       changeMode('error');
     }
@@ -850,74 +833,6 @@ export default function Home() {
     recordSample,
     startSpeechRecognition,
   ]);
-
-  const startDemo = useCallback(() => {
-    cleanupEngines();
-    prepareSession();
-    setSessionKind('demo');
-    activeRef.current = true;
-    analysisStartedAtRef.current = performance.now();
-    changeMode('live');
-    setInputState('good');
-
-    demoTimerRef.current = window.setInterval(() => {
-      if (modeRef.current !== 'live') return;
-      const now = performance.now();
-      const time = (now - analysisStartedAtRef.current) / 1000;
-      const tension = clamp(
-        45 + Math.sin(time / 3.8) * 18 + Math.sin(time / 1.7) * 7,
-        20,
-        78,
-      );
-      const energy = clamp(
-        66 + Math.sin(time / 2.6) * 16 + Math.cos(time / 5.2) * 8,
-        34,
-        92,
-      );
-      const pace = clamp(
-        145 + Math.sin(time / 4.5) * 32 + Math.cos(time / 2.2) * 14,
-        92,
-        198,
-      );
-      const stability = clamp(84 - Math.sin(time / 3.2) * 13, 58, 96);
-      const nextMetrics: VoiceMetrics = {
-        tension,
-        energy,
-        pace,
-        stability,
-        confidence: 96,
-        pitch: 178 + Math.sin(time / 1.8) * 24,
-        jitter: 0.017 + Math.abs(Math.sin(time / 2.7)) * 0.022,
-        volume: -24 + Math.sin(time / 1.4) * 6,
-      };
-
-      metricsRef.current = nextMetrics;
-      setMetrics(nextMetrics);
-      recordSample(nextMetrics, now);
-      setWaveform(
-        Array.from({ length: 28 }, (_, index) =>
-          clamp(
-            24 +
-              Math.abs(
-                Math.sin(time * 4.4 + index * 0.55) *
-                  (38 + Math.sin(time + index) * 19),
-              ),
-            14,
-            96,
-          ),
-        ),
-      );
-
-      const visibleCount = Math.min(
-        DEMO_SCRIPT.length,
-        Math.floor(time / 4.5) + 1,
-      );
-      const nextTranscript = DEMO_SCRIPT.slice(0, visibleCount).join('');
-      transcriptRef.current = nextTranscript;
-      setTranscript(nextTranscript);
-      setInterimTranscript(DEMO_SCRIPT[visibleCount] ?? '');
-    }, 120);
-  }, [changeMode, cleanupEngines, prepareSession, recordSample]);
 
   const pauseSession = () => {
     changeMode('paused');
@@ -936,7 +851,7 @@ export default function Home() {
     if (audioContextRef.current) {
       void audioContextRef.current.resume().catch(() => undefined);
     }
-    if (sessionKind === 'microphone' && recognitionRef.current) {
+    if (recognitionRef.current) {
       try {
         recognitionRef.current.start();
       } catch {
@@ -971,7 +886,6 @@ export default function Home() {
   const resetSession = () => {
     cleanupEngines();
     prepareSession();
-    setSessionKind(null);
     setSummaryOpen(false);
     changeMode('idle');
   };
@@ -1033,9 +947,8 @@ export default function Home() {
         id="rehearsal"
         className="mx-auto max-w-[1260px] scroll-mt-20 px-5 py-6 lg:px-8 lg:py-8"
       >
-        <section className="mb-4 flex items-center justify-between">
+        <section className="mb-4">
           <h1 className="text-xl font-bold tracking-[-0.03em] sm:text-2xl">プレゼン練習</h1>
-          {sessionKind === 'demo' && <Badge variant="outline" className="rounded-md">デモ</Badge>}
         </section>
 
         <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_330px]">
@@ -1102,25 +1015,14 @@ export default function Home() {
 
             <div className="relative z-10 mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
               {(mode === 'idle' || mode === 'error' || mode === 'done') && (
-                <>
-                  <Button
-                    size="lg"
-                    onClick={startMicrophone}
-                    className="h-11 rounded-lg bg-[#2869d8] px-5 text-sm font-bold text-white hover:bg-[#1f5cbe]"
-                  >
-                    <Mic className="size-4" aria-hidden="true" />
-                    {mode === 'error' ? 'マイクを再試行' : 'マイクをオンにして練習'}
-                  </Button>
-                  <Button
-                    size="lg"
-                    variant="ghost"
-                    onClick={startDemo}
-                    className="h-11 rounded-lg px-5 text-white/70 hover:bg-white/10 hover:text-white"
-                  >
-                    <Play className="size-4" aria-hidden="true" />
-                    デモで体験
-                  </Button>
-                </>
+                <Button
+                  size="lg"
+                  onClick={startMicrophone}
+                  className="h-11 rounded-lg bg-[#2869d8] px-5 text-sm font-bold text-white hover:bg-[#1f5cbe]"
+                >
+                  <Mic className="size-4" aria-hidden="true" />
+                  {mode === 'error' ? 'マイクを再試行' : 'マイクをオンにして練習'}
+                </Button>
               )}
 
               {mode === 'requesting' && (
