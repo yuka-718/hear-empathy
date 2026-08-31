@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   description:
     'プレゼン中の緊張度・声の熱量・話すテンポをリアルタイムで可視化し、その場で伝え方を整える音声リハーサルツール。',
   openGraph: {
-    title: 'HearEmpathy — 声から、伝わり方が見える。',
+    title: 'HearEmpathy — 声を、整える。',
     description:
       '声の緊張サイン・熱量・テンポをリアルタイムで可視化する音声リハーサルツール。',
     url: 'https://yuka-718.github.io/hear-empathy/',
@@ -30,13 +30,13 @@ export const metadata: Metadata = {
         url: 'https://yuka-718.github.io/hear-empathy/og.png',
         width: 1600,
         height: 900,
-        alt: 'HearEmpathy — 声から、伝わり方が見える。',
+        alt: 'HearEmpathy — 声を、整える。',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'HearEmpathy — 声から、伝わり方が見える。',
+    title: 'HearEmpathy — 声を、整える。',
     description:
       '声の緊張サイン・熱量・テンポをリアルタイムで可視化する音声リハーサルツール。',
     images: ['https://yuka-718.github.io/hear-empathy/og.png'],

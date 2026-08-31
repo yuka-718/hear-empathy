@@ -7,20 +7,14 @@ import {
   Check,
   CircleAlert,
   Clock3,
-  Cpu,
   Gauge,
-  Headphones,
   LockKeyhole,
   Mic,
   Pause,
   Play,
-  Radio,
   RotateCcw,
-  ShieldCheck,
-  Sparkles,
   Square,
   Volume2,
-  Waves,
 } from 'lucide-react';
 import {
   useCallback,
@@ -224,104 +218,103 @@ function createCoachFeedback(
 ) {
   if (mode === 'idle') {
     return {
-      label: 'ライブ・コーチ',
-      message:
-        'マイクをオンにすると、声の変化に合わせてその場でアドバイスします。',
+      label: '準備',
+      message: 'マイクをオンにして話してください。',
       tone: 'neutral',
     } as const;
   }
 
   if (mode === 'requesting') {
     return {
-      label: 'マイクの許可待ち',
-      message: 'ブラウザの案内で「許可」を選ぶと、練習が始まります。',
+      label: '許可待ち',
+      message: 'マイクの使用を許可してください。',
       tone: 'neutral',
     } as const;
   }
 
   if (mode === 'calibrating') {
     return {
-      label: 'あなたの声を調整中',
-      message: 'いつもの声で話してください。約3秒で基準をつくります。',
+      label: '測定中',
+      message: '声の基準を測定しています。',
       tone: 'neutral',
     } as const;
   }
 
   if (mode === 'paused') {
     return {
-      label: '一時停止中',
-      message: 'ここまでのデータは残っています。準備ができたら再開しましょう。',
+      label: '一時停止',
+      message: '準備ができたら再開してください。',
       tone: 'neutral',
     } as const;
   }
 
   if (mode === 'done') {
     return {
-      label: 'セッション完了',
-      message: 'おつかれさまでした。今回の声の傾向をレポートにまとめました。',
+      label: '完了',
+      message: '練習結果をまとめました。',
       tone: 'positive',
     } as const;
   }
 
   if (mode === 'error') {
     return {
-      label: 'マイクを確認してください',
-      message: '下の案内を確認するか、デモモードで体験できます。',
+      label: '入力確認',
+      message: 'マイクを確認してください。',
       tone: 'warning',
     } as const;
   }
 
   if (inputState === 'silent') {
     return {
-      label: '声を待っています',
-      message: '声を検出できません。マイクを確認し、少し近づいて話してください。',
+      label: '無音',
+      message: '声を検出できません。',
       tone: 'warning',
     } as const;
   }
 
   if (inputState === 'loud') {
     return {
-      label: '入力が大きめです',
-      message: '音が割れそうです。マイクから少し離れると聞きやすくなります。',
+      label: '入力過大',
+      message: 'マイクから少し離れてください。',
       tone: 'warning',
     } as const;
   }
 
   if (metrics.tension >= 69) {
     return {
-      label: '緊張サインが少し上昇',
-      message: '声の高さとテンポが上がっています。次の句点で、ゆっくり息を吐いて。',
+      label: '緊張度 上昇',
+      message: '次の文で、ひと呼吸。',
       tone: 'warning',
     } as const;
   }
 
   if (metrics.pace >= 178) {
     return {
-      label: 'テンポが速くなっています',
-      message: '大切な言葉の前に1秒の間を。聞き手が追いつきやすくなります。',
+      label: '速め',
+      message: '少しゆっくり話しましょう。',
       tone: 'warning',
     } as const;
   }
 
   if (metrics.energy >= 75 && metrics.tension < 62) {
     return {
-      label: '今の熱量、届いています',
-      message: '声の抑揚が聞き手を惹きつけています。そのまま結論まで。',
+      label: '抑揚 良好',
+      message: '今の抑揚は良いです。',
       tone: 'positive',
     } as const;
   }
 
   if (metrics.stability < 54) {
     return {
-      label: '声に細かな揺れがあります',
-      message: '語尾まで息を流すイメージで、ひとつずつ丁寧に届けましょう。',
+      label: '声の揺れ',
+      message: '語尾まで息を流しましょう。',
       tone: 'warning',
     } as const;
   }
 
   return {
-    label: 'いいバランスです',
-    message: '落ち着いたテンポです。聞き手を見ながら、このまま続けて。',
+    label: '安定',
+    message: 'このテンポで続けましょう。',
     tone: 'positive',
   } as const;
 }
@@ -334,7 +327,6 @@ function MetricCard({
   progress,
   color,
   track,
-  surface,
 }: {
   label: string;
   value: string | number;
@@ -343,10 +335,9 @@ function MetricCard({
   progress: number;
   color: string;
   track: string;
-  surface: string;
 }) {
   return (
-    <div className={`metric-card ${surface}`}>
+    <div className="metric-card">
       <div className="flex items-start justify-between">
         <div>
           <p className="metric-label">{label}</p>
@@ -357,9 +348,9 @@ function MetricCard({
         </div>
         <span className={`metric-dot ${color}`} aria-hidden="true" />
       </div>
-      <div className={`mt-5 h-2 overflow-hidden rounded-full ${track}`}>
+      <div className={`mt-5 h-1.5 overflow-hidden rounded-sm ${track}`}>
         <div
-          className={`metric-progress h-full rounded-full ${color}`}
+          className={`metric-progress h-full ${color}`}
           style={{ width: `${clamp(progress)}%` }}
         />
       </div>
@@ -383,8 +374,6 @@ export default function Home() {
   const [errorMessage, setErrorMessage] = useState('');
   const [transcript, setTranscript] = useState('');
   const [interimTranscript, setInterimTranscript] = useState('');
-  const [speechSupported, setSpeechSupported] = useState(false);
-  const [engineReady, setEngineReady] = useState(false);
   const [summary, setSummary] = useState<SessionSummary | null>(null);
   const [summaryOpen, setSummaryOpen] = useState(false);
 
@@ -480,11 +469,9 @@ export default function Home() {
       browserWindow.webkitSpeechRecognition;
 
     if (!Recognition) {
-      setSpeechSupported(false);
       return;
     }
 
-    setSpeechSupported(true);
     const recognition = new Recognition();
     recognition.continuous = true;
     recognition.interimResults = true;
@@ -515,12 +502,6 @@ export default function Home() {
       setInterimTranscript(temporaryText);
     };
 
-    recognition.onerror = (event) => {
-      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-        setSpeechSupported(false);
-      }
-    };
-
     recognition.onend = () => {
       if (
         activeRef.current &&
@@ -538,38 +519,25 @@ export default function Home() {
     try {
       recognition.start();
     } catch {
-      setSpeechSupported(false);
+      recognitionRef.current = null;
     }
   }, []);
 
   useEffect(() => {
-    const browserWindow = window as typeof window & {
-      SpeechRecognition?: SpeechRecognitionConstructor;
-      webkitSpeechRecognition?: SpeechRecognitionConstructor;
-    };
-    setSpeechSupported(
-      Boolean(
-        browserWindow.SpeechRecognition ??
-          browserWindow.webkitSpeechRecognition,
-      ),
-    );
-
     const loadEngine = async () => {
       try {
         const engineUrl = new URL('emotion-engine.wasm', document.baseURI);
         const response = await fetch(engineUrl);
         if (!response.ok) throw new Error('WASM engine could not be loaded.');
         const binary = await response.arrayBuffer();
-        const result = await WebAssembly.instantiate(binary);
+        const result = await WebAssembly.instantiate(binary, {});
         const exports = result.instance.exports as unknown as TensionEngine;
         if (typeof exports.score !== 'function') {
           throw new Error('WASM score export is unavailable.');
         }
         tensionEngineRef.current = exports;
-        setEngineReady(true);
       } catch {
         tensionEngineRef.current = null;
-        setEngineReady(false);
       }
     };
 
@@ -1013,9 +981,9 @@ export default function Home() {
     [inputState, metrics, mode],
   );
   const status = {
-    idle: { text: '準備OK', className: 'status-ready' },
-    requesting: { text: 'マイク許可待ち', className: 'status-waiting' },
-    calibrating: { text: '声を調整中', className: 'status-waiting' },
+    idle: { text: '準備', className: 'status-ready' },
+    requesting: { text: '許可待ち', className: 'status-waiting' },
+    calibrating: { text: '測定中', className: 'status-waiting' },
     live: { text: 'LIVE', className: 'status-live' },
     paused: { text: '一時停止', className: 'status-paused' },
     done: { text: '完了', className: 'status-ready' },
@@ -1024,99 +992,58 @@ export default function Home() {
 
   const tensionNote =
     metrics.tension < 36
-      ? '落ち着いています'
+      ? '低い'
       : metrics.tension < 66
-        ? '少し負荷が上がっています'
-        : '深呼吸のタイミングです';
+        ? 'やや高い'
+        : '高い';
   const energyNote =
     metrics.energy >= 72
-      ? '聞き手を惹きつけています'
+      ? '高い'
       : metrics.energy >= 45
-        ? '自然な熱量です'
-        : '少し抑揚を加えてみましょう';
+        ? '標準'
+        : '低い';
   const paceNote =
     metrics.pace > 178
-      ? '少し速くなっています'
+      ? '速め'
       : metrics.pace < 95
-        ? 'ゆっくり丁寧なテンポです'
-        : 'ちょうどよい速さです';
+        ? 'ゆっくり'
+        : '標準';
 
   return (
     <main className="min-h-screen overflow-hidden bg-background text-foreground">
-      <header className="sticky top-0 z-40 border-b border-border/80 bg-background/88 backdrop-blur-xl">
-        <div className="mx-auto flex h-[72px] max-w-[1440px] items-center justify-between px-5 lg:px-8">
+      <header className="sticky top-0 z-40 border-b border-border bg-white">
+        <div className="mx-auto flex h-16 max-w-[1260px] items-center justify-between px-5 lg:px-8">
           <a href="#rehearsal" className="flex items-center gap-3" aria-label="HearEmpathy ホーム">
             <span className="logo-mark">
               <AudioWaveform className="size-5" aria-hidden="true" />
             </span>
-            <div>
-              <p className="text-[17px] font-bold tracking-[-0.03em]">HearEmpathy</p>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                Voice rehearsal studio
-              </p>
-            </div>
+            <p className="text-[16px] font-bold tracking-[-0.02em]">HearEmpathy</p>
           </a>
 
           <div className="flex items-center gap-2.5">
-            <Badge
-              variant="outline"
-              className="hidden h-8 gap-1.5 rounded-full bg-white/70 px-3 text-[11px] text-muted-foreground sm:flex"
-            >
+            <Badge variant="outline" className="h-7 gap-1.5 rounded-md bg-white px-2.5 text-[11px] font-normal text-muted-foreground">
               <LockKeyhole className="size-3" aria-hidden="true" />
-              声の特徴は端末内で解析
+              端末内解析
             </Badge>
-            <Badge
-              variant="outline"
-              className="hidden h-8 gap-1.5 rounded-full bg-white/70 px-3 text-[11px] text-muted-foreground md:flex"
-            >
-              <Cpu className="size-3" aria-hidden="true" />
-              {engineReady ? 'WASM engine ready' : 'Local engine'}
-            </Badge>
-            <span
-              className="grid size-9 place-items-center rounded-full border border-border bg-white text-xs font-bold"
-              aria-label="プロフィール"
-            >
-              HE
-            </span>
           </div>
         </div>
       </header>
 
       <div
         id="rehearsal"
-        className="mx-auto max-w-[1440px] scroll-mt-20 px-5 py-7 lg:px-8 lg:py-9"
+        className="mx-auto max-w-[1260px] scroll-mt-20 px-5 py-6 lg:px-8 lg:py-8"
       >
-        <section className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end">
-          <div>
-            <div className="mb-2 flex items-center gap-2 text-xs font-bold text-[#6d5bd0]">
-              <Radio className="size-3.5" aria-hidden="true" />
-              リハーサル・ルーム
-              {sessionKind === 'demo' && (
-                <Badge className="ml-1 rounded-full bg-[#e8e3ff] text-[#5c49c4]">
-                  デモ
-                </Badge>
-              )}
-            </div>
-            <h1 className="text-2xl font-bold tracking-[-0.04em] sm:text-[32px]">
-              聞き手の気持ちを、話している今に。
-            </h1>
-          </div>
-          <p className="max-w-md text-sm leading-6 text-muted-foreground">
-            声の揺らぎ・テンポ・熱量をリアルタイム解析。必要なアドバイスだけを見ながら、自分らしい伝え方を整えます。
-          </p>
+        <section className="mb-4 flex items-center justify-between">
+          <h1 className="text-xl font-bold tracking-[-0.03em] sm:text-2xl">プレゼン練習</h1>
+          {sessionKind === 'demo' && <Badge variant="outline" className="rounded-md">デモ</Badge>}
         </section>
 
         <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_330px]">
           <div
-            className={`coach-stage relative flex min-h-[590px] flex-col overflow-hidden rounded-[30px] p-5 text-white shadow-[0_28px_70px_rgba(34,30,71,.16)] sm:p-7 ${mode === 'live' ? 'is-live' : ''}`}
+            className={`coach-stage relative flex min-h-[560px] flex-col overflow-hidden rounded-[16px] border border-[#2d3137] p-5 text-white sm:p-7 ${mode === 'live' ? 'is-live' : ''}`}
           >
             <div className="relative z-10 flex items-center justify-between">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/45">
-                  Real-time feedback
-                </p>
-                <h2 className="mt-1 text-lg font-semibold">ライブ・コーチ</h2>
-              </div>
+              <h2 className="text-lg font-semibold">コーチ</h2>
               <div className="flex items-center gap-2">
                 {(mode === 'live' || mode === 'calibrating' || mode === 'paused') && (
                   <span className="hidden items-center gap-1.5 font-mono text-xs text-white/55 sm:flex">
@@ -1124,7 +1051,7 @@ export default function Home() {
                     {formatTime(elapsed)}
                   </span>
                 )}
-                <Badge className={`session-status h-7 gap-1.5 rounded-full px-3 ${status.className}`}>
+                <Badge className={`session-status h-7 gap-1.5 rounded-md px-2.5 ${status.className}`}>
                   <span className="status-light size-1.5 rounded-full" />
                   {status.text}
                 </Badge>
@@ -1134,16 +1061,16 @@ export default function Home() {
             <output
               aria-live="polite"
               aria-atomic="true"
-              className={`coach-panel relative z-10 mt-8 flex flex-1 flex-col justify-center rounded-[22px] border p-5 backdrop-blur-sm sm:p-8 coach-${coach.tone}`}
+              className={`coach-panel relative z-10 mt-6 flex flex-1 flex-col justify-center rounded-[10px] border p-5 sm:p-8 coach-${coach.tone}`}
             >
               <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-[#b8ec8f]">
-                  <Sparkles className="size-4" aria-hidden="true" />
+                <div className="flex items-center gap-2 text-[#7dd3a5]">
+                  <Activity className="size-4" aria-hidden="true" />
                   <p className="text-xs font-bold">{coach.label}</p>
                 </div>
                 {mode === 'live' && (
-                  <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/35">
-                    {round(metrics.confidence)}% confidence
+                  <span className="text-[10px] font-medium text-white/40">
+                    精度 {round(metrics.confidence)}%
                   </span>
                 )}
               </div>
@@ -1151,16 +1078,15 @@ export default function Home() {
                 {coach.message}
               </p>
               <div
-                className="mt-7 flex h-24 items-center gap-[5px] overflow-hidden"
+                className="mt-7 flex h-24 items-center gap-[4px] overflow-hidden"
                 aria-hidden="true"
               >
                 {waveform.map((height, index) => (
                   <span
                     key={index}
-                    className={`wave-bar flex-1 rounded-full bg-gradient-to-t from-[#9b8cf5] to-[#b8ec8f] ${mode === 'live' ? 'is-active' : ''}`}
+                    className="wave-bar flex-1 rounded-sm bg-[#7dd3a5]"
                     style={{
                       height: `${height}%`,
-                      animationDelay: `${index * -70}ms`,
                     }}
                   />
                 ))}
@@ -1168,7 +1094,7 @@ export default function Home() {
             </output>
 
             {errorMessage && (
-              <div className="relative z-10 mt-4 flex gap-3 rounded-2xl border border-[#ff8d80]/30 bg-[#ff7466]/10 p-4 text-sm leading-6 text-white/80">
+              <div className="relative z-10 mt-4 flex gap-3 rounded-lg border border-[#dc5a4f]/40 bg-[#dc5a4f]/10 p-4 text-sm leading-6 text-white/80">
                 <CircleAlert className="mt-0.5 size-4 shrink-0 text-[#ff9d93]" aria-hidden="true" />
                 <p>{errorMessage}</p>
               </div>
@@ -1180,7 +1106,7 @@ export default function Home() {
                   <Button
                     size="lg"
                     onClick={startMicrophone}
-                    className="h-12 rounded-full bg-[#ff7466] px-6 text-sm font-bold text-white shadow-[0_12px_24px_rgba(255,116,102,.25)] hover:bg-[#ff6657]"
+                    className="h-11 rounded-lg bg-[#2869d8] px-5 text-sm font-bold text-white hover:bg-[#1f5cbe]"
                   >
                     <Mic className="size-4" aria-hidden="true" />
                     {mode === 'error' ? 'マイクを再試行' : 'マイクをオンにして練習'}
@@ -1189,7 +1115,7 @@ export default function Home() {
                     size="lg"
                     variant="ghost"
                     onClick={startDemo}
-                    className="h-12 rounded-full px-5 text-white/70 hover:bg-white/10 hover:text-white"
+                    className="h-11 rounded-lg px-5 text-white/70 hover:bg-white/10 hover:text-white"
                   >
                     <Play className="size-4" aria-hidden="true" />
                     デモで体験
@@ -1201,7 +1127,7 @@ export default function Home() {
                 <Button
                   size="lg"
                   disabled
-                  className="h-12 rounded-full bg-white/10 px-6 text-white"
+                  className="h-11 rounded-lg bg-white/10 px-5 text-white"
                 >
                   <Mic className="size-4" aria-hidden="true" />
                   ブラウザでマイクを許可してください
@@ -1214,7 +1140,7 @@ export default function Home() {
                     size="lg"
                     variant="outline"
                     onClick={pauseSession}
-                    className="h-12 rounded-full border-white/15 bg-white/8 px-5 text-white hover:bg-white/14 hover:text-white"
+                    className="h-11 rounded-lg border-white/15 bg-white/8 px-5 text-white hover:bg-white/14 hover:text-white"
                   >
                     <Pause className="size-4" aria-hidden="true" />
                     一時停止
@@ -1223,10 +1149,10 @@ export default function Home() {
                     size="lg"
                     variant="ghost"
                     onClick={finishSession}
-                    className="h-12 rounded-full px-5 text-white/70 hover:bg-white/10 hover:text-white"
+                    className="h-11 rounded-lg px-5 text-white/70 hover:bg-white/10 hover:text-white"
                   >
                     <Square className="size-3.5 fill-current" aria-hidden="true" />
-                    終了してレポート
+                    終了
                   </Button>
                 </>
               )}
@@ -1236,7 +1162,7 @@ export default function Home() {
                   <Button
                     size="lg"
                     onClick={resumeSession}
-                    className="h-12 rounded-full bg-[#b8ec8f] px-6 font-bold text-[#211f3b] hover:bg-[#a9e57b]"
+                    className="h-11 rounded-lg bg-[#7dd3a5] px-5 font-bold text-[#171a1f] hover:bg-[#6bc292]"
                   >
                     <Play className="size-4 fill-current" aria-hidden="true" />
                     再開
@@ -1245,10 +1171,10 @@ export default function Home() {
                     size="lg"
                     variant="ghost"
                     onClick={finishSession}
-                    className="h-12 rounded-full px-5 text-white/70 hover:bg-white/10 hover:text-white"
+                    className="h-11 rounded-lg px-5 text-white/70 hover:bg-white/10 hover:text-white"
                   >
                     <Square className="size-3.5 fill-current" aria-hidden="true" />
-                    終了してレポート
+                    終了
                   </Button>
                 </>
               )}
@@ -1265,9 +1191,8 @@ export default function Home() {
               unit="/100"
               note={tensionNote}
               progress={metrics.tension}
-              color="bg-[#ff7466]"
-              track="bg-[#ffddd7]"
-              surface="bg-[#fff7ef]"
+              color="bg-[#dc5a4f]"
+              track="bg-[#eceef1]"
             />
             <MetricCard
               label="声の熱量"
@@ -1275,9 +1200,8 @@ export default function Home() {
               unit="/100"
               note={energyNote}
               progress={metrics.energy}
-              color="bg-[#8270e8]"
-              track="bg-[#dcd6ff]"
-              surface="bg-[#f2f0ff]"
+              color="bg-[#2869d8]"
+              track="bg-[#eceef1]"
             />
             <MetricCard
               label="話すテンポ"
@@ -1285,19 +1209,18 @@ export default function Home() {
               unit="語/分・推定"
               note={paceNote}
               progress={((metrics.pace - 70) / 140) * 100}
-              color="bg-[#73b84b]"
-              track="bg-[#d8ebca]"
-              surface="bg-[#f2f9ec]"
+              color="bg-[#3c8b61]"
+              track="bg-[#eceef1]"
             />
 
             <div className="diagnostic-card sm:col-span-3 lg:col-span-1">
               <div className="mb-4 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Activity className="size-4 text-[#6d5bd0]" aria-hidden="true" />
-                  <p className="text-xs font-bold">音声シグナル</p>
+                  <Activity className="size-4 text-[#2869d8]" aria-hidden="true" />
+                  <p className="text-xs font-bold">詳細</p>
                 </div>
                 <span className="text-[10px] font-semibold text-muted-foreground">
-                  {mode === 'idle' ? 'サンプル表示' : 'リアルタイム'}
+                  {mode === 'idle' ? '待機' : '計測中'}
                 </span>
               </div>
               <dl className="grid grid-cols-3 gap-2">
@@ -1314,28 +1237,17 @@ export default function Home() {
                   <dd>{round(metrics.stability)}</dd>
                 </div>
               </dl>
-              <div className="mt-4 flex items-center gap-2 border-t border-border/70 pt-4 text-[11px] leading-5 text-muted-foreground">
-                <ShieldCheck className="size-4 shrink-0 text-[#73b84b]" aria-hidden="true" />
-                感情を断定せず、声に現れた傾向を表示します
-              </div>
             </div>
           </aside>
         </section>
 
-        <section className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_330px]">
+        <section className="mt-5">
           <article className="transcript-card">
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-2">
-                <Captions className="size-4 text-[#6d5bd0]" aria-hidden="true" />
-                <h2 className="text-sm font-bold">話した内容</h2>
+                <Captions className="size-4 text-[#2869d8]" aria-hidden="true" />
+                <h2 className="text-sm font-bold">文字起こし</h2>
               </div>
-              <Badge variant="outline" className="rounded-full bg-white px-2.5 text-[10px] text-muted-foreground">
-                {sessionKind === 'demo'
-                  ? 'デモ字幕'
-                  : speechSupported
-                    ? 'Web Speech API'
-                    : '音響推定のみ'}
-              </Badge>
             </div>
             <p className="mt-3 min-h-14 text-sm leading-7 text-muted-foreground">
               {transcript || interimTranscript ? (
@@ -1344,71 +1256,29 @@ export default function Home() {
                   <span className="text-muted-foreground/60">{interimTranscript}</span>
                 </>
               ) : (
-                '対応ブラウザでは、話した言葉がここに表示されます。字幕が使えない場合も、音声特徴の解析は続きます。'
+                '話し始めると、ここに表示されます。'
               )}
             </p>
           </article>
-
-          <article className="focus-card">
-            <span className="grid size-10 place-items-center rounded-2xl bg-[#f1effd] text-[#6d5bd0]">
-              <Sparkles className="size-4" aria-hidden="true" />
-            </span>
-            <div>
-              <p className="text-sm font-bold">今日のフォーカス</p>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                結論の前に、1秒の間をつくる
-              </p>
-            </div>
-          </article>
         </section>
 
-        <section className="mt-5 grid gap-3 md:grid-cols-3" aria-label="HearEmpathyの仕組み">
-          <article className="tech-card">
-            <span><Waves aria-hidden="true" /></span>
-            <div>
-              <h3>Web Audio</h3>
-              <p>音量・F0・声の揺らぎを約10回/秒で解析します。</p>
-            </div>
-          </article>
-          <article className="tech-card">
-            <span><Captions aria-hidden="true" /></span>
-            <div>
-              <h3>Web Speech</h3>
-              <p>対応ブラウザでは字幕からテンポ推定を補正します。</p>
-            </div>
-          </article>
-          <article className="tech-card">
-            <span><Cpu aria-hidden="true" /></span>
-            <div>
-              <h3>Local WASM</h3>
-              <p>5つの音声特徴から緊張サインを端末内で計算します。</p>
-            </div>
-          </article>
-        </section>
-
-        <footer className="mt-8 flex flex-col justify-between gap-3 border-t border-border/80 py-6 text-[11px] leading-5 text-muted-foreground sm:flex-row sm:items-center">
-          <p>HearEmpathyは発表練習用のシミュレーターです。医療・心理診断を目的としません。</p>
-          <p className="flex items-center gap-1.5">
-            <Headphones className="size-3.5" aria-hidden="true" />
-            音声フィードバックを使う場合はヘッドホン推奨
-          </p>
+        <footer className="mt-8 border-t border-border/80 py-5 text-[11px] text-muted-foreground">
+          ※ 練習用の推定値です。診断には使用できません。
         </footer>
       </div>
 
       {summaryOpen && (
-        <div
-          className="summary-backdrop"
-          onMouseDown={(event) => {
-            if (event.currentTarget === event.target) setSummaryOpen(false);
-          }}
-        >
-          <section
-            role="dialog"
+        <div className="summary-backdrop">
+          <dialog
+            open
             aria-modal="true"
             aria-labelledby="summary-title"
             aria-describedby="summary-description"
-            tabIndex={-1}
-            className="summary-dialog max-h-[calc(100vh-2rem)] w-[min(620px,calc(100%-2rem))] overflow-y-auto rounded-[28px] p-0"
+            onCancel={(event) => {
+              event.preventDefault();
+              setSummaryOpen(false);
+            }}
+            className="summary-dialog max-h-[calc(100vh-2rem)] w-[min(620px,calc(100%-2rem))] overflow-y-auto rounded-[12px] p-0"
           >
           <div className="summary-hero">
             <div className="summary-check">
@@ -1416,10 +1286,10 @@ export default function Home() {
             </div>
             <div className="flex flex-col gap-2">
               <h2 id="summary-title" className="text-2xl font-bold tracking-[-0.04em]">
-                リハーサル、おつかれさまでした。
+                練習結果
               </h2>
               <p id="summary-description" className="text-sm leading-6 text-muted-foreground">
-                声の特徴から、今回の「伝わり方」をまとめました。
+                声の傾向をまとめました。
               </p>
             </div>
           </div>
@@ -1454,23 +1324,22 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="mt-4 flex items-start gap-2 rounded-2xl bg-[#f6f4ef] p-3 text-[11px] leading-5 text-muted-foreground">
-                <ShieldCheck className="mt-0.5 size-4 shrink-0 text-[#6d5bd0]" aria-hidden="true" />
-                このレポートは声の特徴から推定した練習用指標です。録音データは保存していません。
+              <div className="mt-4 rounded-lg border border-border p-3 text-[11px] leading-5 text-muted-foreground">
+                録音データは保存していません。
               </div>
             </div>
           )}
 
-          <div className="mt-3 flex flex-col-reverse gap-2 rounded-b-[28px] border-t bg-muted/50 px-5 py-4 sm:flex-row sm:justify-end sm:px-7">
-            <Button variant="outline" onClick={() => setSummaryOpen(false)} className="rounded-full">
+          <div className="mt-3 flex flex-col-reverse gap-2 rounded-b-[12px] border-t bg-muted/50 px-5 py-4 sm:flex-row sm:justify-end sm:px-7">
+            <Button variant="outline" onClick={() => setSummaryOpen(false)} className="rounded-lg">
               画面に戻る
             </Button>
-            <Button onClick={resetSession} className="rounded-full bg-[#211f3b] px-5 text-white hover:bg-[#302d52]">
+            <Button onClick={resetSession} className="rounded-lg bg-[#171a1f] px-5 text-white hover:bg-[#2d3137]">
               <RotateCcw className="size-4" aria-hidden="true" />
               もう一度練習
             </Button>
           </div>
-          </section>
+          </dialog>
         </div>
       )}
     </main>
