@@ -19,7 +19,6 @@ import {
   ShieldCheck,
   Sparkles,
   Square,
-  UserRound,
   Volume2,
   Waves,
 } from 'lucide-react';
@@ -111,14 +110,6 @@ const DEFAULT_METRICS: VoiceMetrics = {
   jitter: 0.018,
   volume: -24,
 };
-
-const AUDIENCE = [
-  { name: 'Mina', tone: 'bg-[#ff8d80]' },
-  { name: 'Sota', tone: 'bg-[#b8ec8f]' },
-  { name: 'Rin', tone: 'bg-[#9b8cf5]' },
-  { name: 'Kai', tone: 'bg-[#f7c86e]' },
-  { name: 'Yui', tone: 'bg-[#79d7d0]' },
-];
 
 const DEMO_SCRIPT = [
   'みなさん、今日は聞き手に届く話し方についてお話しします。',
@@ -235,7 +226,7 @@ function createCoachFeedback(
     return {
       label: 'ライブ・コーチ',
       message:
-        'マイクをオンにすると、あなたの声に合わせて観客が反応します。',
+        'マイクをオンにすると、声の変化に合わせてその場でアドバイスします。',
       tone: 'neutral',
     } as const;
   }
@@ -333,74 +324,6 @@ function createCoachFeedback(
     message: '落ち着いたテンポです。聞き手を見ながら、このまま続けて。',
     tone: 'positive',
   } as const;
-}
-
-function getAudienceReactions(
-  mode: SessionMode,
-  metrics: VoiceMetrics,
-  inputState: InputState,
-) {
-  if (mode === 'idle' || mode === 'requesting') {
-    return [
-      { text: '準備OK', mood: 'waiting' },
-      { text: '聞かせて', mood: 'waiting' },
-      { text: '楽しみ', mood: 'waiting' },
-      { text: 'いつでも', mood: 'waiting' },
-      { text: '待っています', mood: 'waiting' },
-    ];
-  }
-
-  if (mode === 'calibrating') {
-    return AUDIENCE.map((_, index) => ({
-      text: index % 2 ? '聞いています' : '声を調整中',
-      mood: 'listening',
-    }));
-  }
-
-  if (mode === 'paused' || mode === 'done' || inputState === 'silent') {
-    return AUDIENCE.map((_, index) => ({
-      text: index % 2 ? 'ゆっくりでOK' : '待っています',
-      mood: 'waiting',
-    }));
-  }
-
-  if (metrics.tension >= 69) {
-    return [
-      { text: '大丈夫', mood: 'support' },
-      { text: 'ゆっくりでOK', mood: 'support' },
-      { text: 'うんうん', mood: 'nod' },
-      { text: '聞いてるよ', mood: 'support' },
-      { text: 'ひと呼吸', mood: 'nod' },
-    ];
-  }
-
-  if (metrics.pace >= 178) {
-    return [
-      { text: '少し速いかも', mood: 'thinking' },
-      { text: 'ひと呼吸', mood: 'nod' },
-      { text: '追いつきたい', mood: 'thinking' },
-      { text: '間がほしい', mood: 'thinking' },
-      { text: '聞いています', mood: 'listening' },
-    ];
-  }
-
-  if (metrics.energy >= 73) {
-    return [
-      { text: 'いい熱量！', mood: 'nod' },
-      { text: 'もっと聞きたい', mood: 'lean' },
-      { text: 'なるほど', mood: 'nod' },
-      { text: '刺さった！', mood: 'lean' },
-      { text: 'わかりやすい', mood: 'nod' },
-    ];
-  }
-
-  return [
-    { text: 'うんうん', mood: 'nod' },
-    { text: '聞いています', mood: 'listening' },
-    { text: 'なるほど', mood: 'nod' },
-    { text: '続きが気になる', mood: 'lean' },
-    { text: 'わかりやすい', mood: 'nod' },
-  ];
 }
 
 function MetricCard({
@@ -1089,11 +1012,6 @@ export default function Home() {
     () => createCoachFeedback(mode, metrics, inputState),
     [inputState, metrics, mode],
   );
-  const reactions = useMemo(
-    () => getAudienceReactions(mode, metrics, inputState),
-    [inputState, metrics, mode],
-  );
-
   const status = {
     idle: { text: '準備OK', className: 'status-ready' },
     requesting: { text: 'マイク許可待ち', className: 'status-waiting' },
@@ -1184,20 +1102,20 @@ export default function Home() {
             </h1>
           </div>
           <p className="max-w-md text-sm leading-6 text-muted-foreground">
-            声の揺らぎ・テンポ・熱量をリアルタイム解析。観客の反応を見ながら、自分らしい伝え方を整えます。
+            声の揺らぎ・テンポ・熱量をリアルタイム解析。必要なアドバイスだけを見ながら、自分らしい伝え方を整えます。
           </p>
         </section>
 
         <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_330px]">
           <div
-            className={`audience-stage relative min-h-[590px] overflow-hidden rounded-[30px] p-5 text-white shadow-[0_28px_70px_rgba(34,30,71,.16)] sm:p-7 ${mode === 'live' ? 'is-live' : ''}`}
+            className={`coach-stage relative flex min-h-[590px] flex-col overflow-hidden rounded-[30px] p-5 text-white shadow-[0_28px_70px_rgba(34,30,71,.16)] sm:p-7 ${mode === 'live' ? 'is-live' : ''}`}
           >
             <div className="relative z-10 flex items-center justify-between">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/45">
-                  Virtual audience
+                  Real-time feedback
                 </p>
-                <h2 className="mt-1 text-lg font-semibold">観客の反応</h2>
+                <h2 className="mt-1 text-lg font-semibold">ライブ・コーチ</h2>
               </div>
               <div className="flex items-center gap-2">
                 {(mode === 'live' || mode === 'calibrating' || mode === 'paused') && (
@@ -1213,34 +1131,10 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="relative z-10 mx-auto mt-8 grid max-w-[700px] grid-cols-2 items-end gap-x-4 gap-y-7 px-1 sm:grid-cols-3 sm:px-5">
-              {AUDIENCE.map((person, index) => (
-                <div
-                  key={person.name}
-                  className={`audience-person ${index === 4 ? 'hidden sm:flex' : ''}`}
-                  data-mood={reactions[index].mood}
-                >
-                  <span className="reaction-bubble">{reactions[index].text}</span>
-                  <span
-                    className={`audience-avatar grid size-[66px] place-items-center rounded-full ${person.tone} text-[#211f3b] shadow-[0_12px_30px_rgba(0,0,0,.2)]`}
-                  >
-                    <UserRound
-                      className="size-8"
-                      strokeWidth={1.8}
-                      aria-hidden="true"
-                    />
-                  </span>
-                  <span className="mt-2 text-xs font-semibold text-white/65">
-                    {person.name}
-                  </span>
-                </div>
-              ))}
-            </div>
-
             <output
               aria-live="polite"
               aria-atomic="true"
-              className={`coach-panel relative z-10 mt-8 rounded-[22px] border p-4 backdrop-blur-sm sm:p-5 coach-${coach.tone}`}
+              className={`coach-panel relative z-10 mt-8 flex flex-1 flex-col justify-center rounded-[22px] border p-5 backdrop-blur-sm sm:p-8 coach-${coach.tone}`}
             >
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 text-[#b8ec8f]">
@@ -1257,7 +1151,7 @@ export default function Home() {
                 {coach.message}
               </p>
               <div
-                className="mt-4 flex h-12 items-center gap-[5px] overflow-hidden"
+                className="mt-7 flex h-24 items-center gap-[5px] overflow-hidden"
                 aria-hidden="true"
               >
                 {waveform.map((height, index) => (

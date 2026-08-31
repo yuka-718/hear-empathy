@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://yuka-718.github.io/hear-empathy/'),
   title: 'HearEmpathy — 声から伝わり方を整える',
   description:
-    'プレゼン中の緊張度・声の熱量・話すテンポをリアルタイムで可視化し、バーチャル観客が反応する音声リハーサルツール。',
+    'プレゼン中の緊張度・声の熱量・話すテンポをリアルタイムで可視化し、その場で伝え方を整える音声リハーサルツール。',
   openGraph: {
     title: 'HearEmpathy — 声から、伝わり方が見える。',
     description:

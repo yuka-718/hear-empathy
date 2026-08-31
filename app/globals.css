@@ -148,7 +148,7 @@
   box-shadow: 0 8px 20px rgba(33, 31, 59, 0.18);
 }
 
-.audience-stage {
+.coach-stage {
   background:
     radial-gradient(circle at 50% 12%, rgba(139, 116, 232, 0.3), transparent 34%),
     radial-gradient(circle at 90% 92%, rgba(119, 213, 204, 0.14), transparent 28%),
@@ -156,14 +156,14 @@
   transition: box-shadow 400ms ease;
 }
 
-.audience-stage.is-live {
+.coach-stage.is-live {
   box-shadow:
     0 28px 70px rgba(34, 30, 71, 0.2),
     0 0 0 1px rgba(184, 236, 143, 0.08),
     0 0 80px rgba(137, 115, 232, 0.08);
 }
 
-.audience-stage::before {
+.coach-stage::before {
   position: absolute;
   inset: 0;
   content: '';
@@ -171,79 +171,6 @@
     linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
   background-size: 42px 42px;
   mask-image: linear-gradient(to bottom, black, transparent 70%);
-}
-
-.audience-person {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  animation: audience-float 4s ease-in-out infinite;
-}
-
-.audience-person:nth-child(2n) {
-  animation-delay: -1.4s;
-}
-
-.audience-person:nth-child(3n) {
-  animation-delay: -2.7s;
-}
-
-.audience-avatar {
-  transition:
-    transform 300ms ease,
-    filter 300ms ease,
-    box-shadow 300ms ease;
-}
-
-.audience-person[data-mood='nod'] .audience-avatar {
-  animation: audience-nod 1.8s ease-in-out infinite;
-  filter: saturate(1.05) brightness(1.04);
-}
-
-.audience-person[data-mood='lean'] .audience-avatar {
-  transform: translateY(-5px) scale(1.04);
-  box-shadow: 0 15px 38px rgba(0, 0, 0, 0.24);
-}
-
-.audience-person[data-mood='support'] .reaction-bubble {
-  border-color: rgba(184, 236, 143, 0.28);
-  background: rgba(184, 236, 143, 0.12);
-  color: #dfffc8;
-}
-
-.audience-person[data-mood='thinking'] .audience-avatar {
-  transform: rotate(-2deg);
-  filter: saturate(0.9);
-}
-
-.reaction-bubble {
-  position: relative;
-  margin-bottom: 9px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.09);
-  padding: 5px 10px;
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 10px;
-  font-weight: 700;
-  backdrop-filter: blur(10px);
-  transition:
-    color 260ms ease,
-    background 260ms ease,
-    border-color 260ms ease;
-}
-
-.reaction-bubble::after {
-  position: absolute;
-  bottom: -4px;
-  left: 50%;
-  width: 7px;
-  height: 7px;
-  transform: translateX(-50%) rotate(45deg);
-  border-right: 1px solid rgba(255, 255, 255, 0.12);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.09);
-  content: '';
 }
 
 .wave-bar {
@@ -575,33 +502,6 @@
   color: #6d5bd0;
 }
 
-@keyframes audience-float {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-4px);
-  }
-}
-
-@keyframes audience-nod {
-  0%,
-  55%,
-  100% {
-    transform: translateY(0) rotate(0);
-  }
-  64% {
-    transform: translateY(3px) rotate(1deg);
-  }
-  73% {
-    transform: translateY(0) rotate(0);
-  }
-  82% {
-    transform: translateY(3px) rotate(-1deg);
-  }
-}
-
 @keyframes wave-glow {
   from {
     filter: brightness(0.88);
@@ -644,15 +544,8 @@
 }
 
 @media (max-width: 639px) {
-  .audience-stage {
+  .coach-stage {
     border-radius: 24px;
-  }
-
-  .reaction-bubble {
-    max-width: 112px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .summary-hero {
@@ -665,8 +558,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .audience-person,
-  .audience-avatar,
   .wave-bar,
   .status-light {
     animation: none;
