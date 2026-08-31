@@ -137,17 +137,6 @@
   }
 }
 
-.logo-mark {
-  display: grid;
-  width: 32px;
-  height: 32px;
-  place-items: center;
-  border-radius: 7px;
-  background: #171a1f;
-  color: white;
-  box-shadow: none;
-}
-
 .coach-stage {
   background: #171a1f;
   transition: border-color 200ms ease;
@@ -265,8 +254,7 @@
   transition: width 260ms ease;
 }
 
-.diagnostic-card,
-.transcript-card {
+.diagnostic-card {
   border: 1px solid var(--border);
   border-radius: 12px;
   background: white;
@@ -295,10 +283,6 @@
   color: var(--foreground);
   font-size: 12px;
   font-weight: 750;
-}
-
-.transcript-card {
-  padding: 20px 22px;
 }
 
 .summary-backdrop {

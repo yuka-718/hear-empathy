@@ -2,13 +2,10 @@
 
 import {
   Activity,
-  AudioWaveform,
-  Captions,
   Check,
   CircleAlert,
   Clock3,
   Gauge,
-  LockKeyhole,
   Mic,
   Pause,
   Play,
@@ -362,8 +359,6 @@ export default function Home() {
   const [elapsed, setElapsed] = useState(0);
   const [inputState, setInputState] = useState<InputState>('ready');
   const [errorMessage, setErrorMessage] = useState('');
-  const [transcript, setTranscript] = useState('');
-  const [interimTranscript, setInterimTranscript] = useState('');
   const [summary, setSummary] = useState<SessionSummary | null>(null);
   const [summaryOpen, setSummaryOpen] = useState(false);
 
@@ -428,8 +423,6 @@ export default function Home() {
     metricsRef.current = DEFAULT_METRICS;
     setInputState('ready');
     setErrorMessage('');
-    setTranscript('');
-    setInterimTranscript('');
     transcriptRef.current = '';
     setSummary(null);
     samplesRef.current = [];
@@ -463,7 +456,6 @@ export default function Home() {
 
     recognition.onresult = (event) => {
       let finalText = '';
-      let temporaryText = '';
 
       for (
         let resultIndex = event.resultIndex;
@@ -473,17 +465,11 @@ export default function Home() {
         const result = event.results[resultIndex];
         const currentText = result[0]?.transcript ?? '';
         if (result.isFinal) finalText += currentText;
-        else temporaryText += currentText;
       }
 
       if (finalText) {
-        setTranscript((current) => {
-          const next = `${current}${finalText}`;
-          transcriptRef.current = next;
-          return next;
-        });
+        transcriptRef.current = `${transcriptRef.current}${finalText}`;
       }
-      setInterimTranscript(temporaryText);
     };
 
     recognition.onend = () => {
@@ -925,27 +911,9 @@ export default function Home() {
 
   return (
     <main className="min-h-screen overflow-hidden bg-background text-foreground">
-      <header className="sticky top-0 z-40 border-b border-border bg-white">
-        <div className="mx-auto flex h-16 max-w-[1260px] items-center justify-between px-5 lg:px-8">
-          <a href="#rehearsal" className="flex items-center gap-3" aria-label="HearEmpathy ホーム">
-            <span className="logo-mark">
-              <AudioWaveform className="size-5" aria-hidden="true" />
-            </span>
-            <p className="text-[16px] font-bold tracking-[-0.02em]">HearEmpathy</p>
-          </a>
-
-          <div className="flex items-center gap-2.5">
-            <Badge variant="outline" className="h-7 gap-1.5 rounded-md bg-white px-2.5 text-[11px] font-normal text-muted-foreground">
-              <LockKeyhole className="size-3" aria-hidden="true" />
-              端末内解析
-            </Badge>
-          </div>
-        </div>
-      </header>
-
       <div
         id="rehearsal"
-        className="mx-auto max-w-[1260px] scroll-mt-20 px-5 py-6 lg:px-8 lg:py-8"
+        className="mx-auto max-w-[1260px] px-5 py-6 lg:px-8 lg:py-8"
       >
         <section className="mb-4">
           <h1 className="text-xl font-bold tracking-[-0.03em] sm:text-2xl">プレゼン練習</h1>
@@ -1143,30 +1111,6 @@ export default function Home() {
           </aside>
         </section>
 
-        <section className="mt-5">
-          <article className="transcript-card">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-2">
-                <Captions className="size-4 text-[#2869d8]" aria-hidden="true" />
-                <h2 className="text-sm font-bold">文字起こし</h2>
-              </div>
-            </div>
-            <p className="mt-3 min-h-14 text-sm leading-7 text-muted-foreground">
-              {transcript || interimTranscript ? (
-                <>
-                  <span className="text-foreground">{transcript}</span>
-                  <span className="text-muted-foreground/60">{interimTranscript}</span>
-                </>
-              ) : (
-                '話し始めると、ここに表示されます。'
-              )}
-            </p>
-          </article>
-        </section>
-
-        <footer className="mt-8 border-t border-border/80 py-5 text-[11px] text-muted-foreground">
-          ※ 練習用の推定値です。診断には使用できません。
-        </footer>
       </div>
 
       {summaryOpen && (
