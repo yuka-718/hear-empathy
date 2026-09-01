@@ -406,27 +406,82 @@ function createCoachFeedback(
 }
 
 function createSummaryHighlights(summary: SessionSummary) {
-  const good =
-    summary.stability >= 75
-      ? '声が安定'
-      : summary.energy >= 65
-        ? '声量をキープ'
-        : summary.pace >= 6 && summary.pace <= 8
-          ? '聞きやすいテンポ'
-          : summary.tension < 45
-            ? '落ち着いて話せた'
-            : '最後まで話し切れた';
+  const goodCandidates = [
+    {
+      score: summary.stability,
+      text: summary.stability >= 85 ? '声の軸が安定' : '大きなブレなし',
+    },
+    {
+      score: summary.energy,
+      text: summary.energy >= 80 ? '声量にメリハリ' : '声量をキープ',
+    },
+    {
+      score: clamp(100 - Math.abs(summary.pace - 7) * 24),
+      text:
+        summary.pace < 6.5
+          ? '落ち着いたテンポ'
+          : summary.pace > 7.5
+            ? 'テンポよく話せた'
+            : '聞きやすいテンポ',
+    },
+    {
+      score: 100 - summary.tension,
+      text: summary.tension < 30 ? '力みを抑えられた' : '落ち着いて話せた',
+    },
+    {
+      score:
+        summary.duration >= 90 ? clamp(70 + (summary.duration - 90) / 4) : -1,
+      text: summary.duration >= 180 ? '長く話しても安定' : '最後まで集中',
+    },
+  ];
+  const good = goodCandidates.reduce((best, candidate) =>
+    candidate.score > best.score ? candidate : best,
+  ).text;
 
+  const nextCandidates = [
+    {
+      score: Math.max(0, (summary.pace - 8) * 35),
+      text: summary.pace >= 9.3 ? '結論だけゆっくり' : '文末で1秒止まる',
+    },
+    {
+      score: Math.max(0, (5.7 - summary.pace) * 28),
+      text: summary.pace < 4.5 ? 'つなぎを少し速く' : '間を少し短くする',
+    },
+    {
+      score: Math.max(0, (summary.tension - 60) * 2),
+      text: summary.tension >= 78 ? '話す前に息を吐く' : '最初の一文をゆっくり',
+    },
+    {
+      score: Math.max(0, (60 - summary.stability) * 2),
+      text: summary.stability < 40 ? '一文を短く区切る' : '語尾を急がない',
+    },
+    {
+      score: Math.max(0, (55 - summary.energy) * 2),
+      text: summary.energy < 35 ? '声を一段前へ' : '大事な言葉だけ強く',
+    },
+    {
+      score: Math.max(0, (summary.energy - 88) * 1.5),
+      text: '強弱をもう一段つける',
+    },
+    {
+      score:
+        summary.duration < 45 ? Math.max(0, (45 - summary.duration) * 0.8) : 0,
+      text: '次は1分続ける',
+    },
+  ];
+  const strongestIssue = nextCandidates.reduce((best, candidate) =>
+    candidate.score > best.score ? candidate : best,
+  );
   const next =
-    summary.pace > 8
-      ? '文末で1秒止まる'
-      : summary.tension > 65
-        ? '最初の一文をゆっくり'
-        : summary.stability < 55
-          ? '一文ずつ区切って話す'
-          : summary.energy < 45
-            ? '大事な言葉だけ強く'
-            : '強調する前に一拍置く';
+    strongestIssue.score >= 10
+      ? strongestIssue.text
+      : summary.energy >= 75
+        ? '強弱を一段つける'
+        : summary.pace >= 7
+          ? '結論の前で1秒止まる'
+          : summary.stability >= 75
+            ? '大事な言葉をひとつ絞る'
+            : '最初と最後をゆっくり';
 
   return { good, next };
 }
