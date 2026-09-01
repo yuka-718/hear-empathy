@@ -128,7 +128,8 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: var(--font-geist-sans), 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+    font-family:
+      var(--font-geist-sans), 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
   }
 
   button,
@@ -148,6 +149,7 @@
 
 .wave-bar {
   min-width: 3px;
+  background: var(--coach-accent);
   transform-origin: center;
   opacity: 0.72;
   transition: height 100ms linear;
@@ -193,17 +195,37 @@
 }
 
 .coach-panel {
+  --coach-accent: #aab1bb;
   border-color: rgba(255, 255, 255, 0.12);
-  background: #111418;
-  transition: border-color 200ms ease;
+  background:
+    radial-gradient(
+      circle at 8% 18%,
+      color-mix(in srgb, var(--coach-accent) 7%, transparent),
+      transparent 34%
+    ),
+    #111418;
+  transition:
+    border-color 200ms ease,
+    background 200ms ease;
 }
 
 .coach-positive {
+  --coach-accent: #7dd3a5;
   border-color: rgba(125, 211, 165, 0.34);
 }
 
 .coach-warning {
+  --coach-accent: #ff9d93;
   border-color: rgba(220, 90, 79, 0.42);
+}
+
+.coach-kicker {
+  width: fit-content;
+  border: 1px solid color-mix(in srgb, var(--coach-accent) 28%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--coach-accent) 8%, transparent);
+  padding: 6px 10px;
+  color: var(--coach-accent);
 }
 
 .metric-card {

@@ -294,8 +294,8 @@ function createCoachFeedback(
 ) {
   if (mode === 'idle') {
     return {
-      label: '準備',
-      message: 'マイクをオンにして話してください。',
+      label: '準備できています',
+      message: 'マイクをオンにして、練習を始める。',
       tone: 'neutral',
     } as const;
   }
@@ -310,8 +310,8 @@ function createCoachFeedback(
 
   if (mode === 'calibrating') {
     return {
-      label: '測定中',
-      message: '声の基準を測定しています。',
+      label: '声を確認中',
+      message: '普段どおり、話し続けてください。',
       tone: 'neutral',
     } as const;
   }
@@ -319,7 +319,7 @@ function createCoachFeedback(
   if (mode === 'paused') {
     return {
       label: '一時停止',
-      message: '準備ができたら再開してください。',
+      message: 'ひと息ついたら、再開。',
       tone: 'neutral',
     } as const;
   }
@@ -342,55 +342,67 @@ function createCoachFeedback(
 
   if (inputState === 'silent') {
     return {
-      label: '無音',
-      message: '声を検出できません。',
-      tone: 'warning',
+      label: '待っています',
+      message: '話し始めてください。',
+      tone: 'neutral',
     } as const;
   }
 
   if (inputState === 'loud') {
     return {
-      label: '入力過大',
-      message: 'マイクから少し離れてください。',
+      label: '声が大きめ',
+      message: 'マイクから、少し離れて。',
       tone: 'warning',
     } as const;
   }
 
-  if (metrics.tension >= 69) {
+  if (metrics.tension >= 72 && metrics.confidence >= 55) {
     return {
-      label: '緊張度 上昇',
-      message: '次の文で、ひと呼吸。',
+      label: 'ひと呼吸',
+      message: '息を吐いてから、次の一文へ。',
       tone: 'warning',
     } as const;
   }
 
   if (metrics.pace >= 8.5) {
     return {
-      label: '速め',
-      message: '少しゆっくり話しましょう。',
+      label: '少し速め',
+      message: '文末で、一拍置いてみて。',
       tone: 'warning',
     } as const;
   }
 
   if (metrics.energy >= 75 && metrics.tension < 62) {
     return {
-      label: '抑揚 良好',
-      message: '今の抑揚は良いです。',
+      label: '伝わっています',
+      message: '今の抑揚、そのままで。',
       tone: 'positive',
     } as const;
   }
 
-  if (metrics.stability < 54) {
+  if (
+    metrics.stability < 45 &&
+    metrics.jitter >= 0.025 &&
+    metrics.confidence >= 65
+  ) {
     return {
-      label: '声の揺れ',
-      message: '語尾まで息を流しましょう。',
+      label: '声を整える',
+      message: '次の一文だけ、少しゆっくり。',
       tone: 'warning',
     } as const;
   }
 
+  if (metrics.energy < 38 && metrics.confidence >= 60) {
+    return {
+      label: 'もう少し前へ',
+      message: '伝えたい言葉を、ひとつ強く。',
+      tone: 'neutral',
+    } as const;
+  }
+
   return {
-    label: '安定',
-    message: 'このテンポで続けましょう。',
+    label: 'いいペース',
+    message: 'そのまま続けて。',
     tone: 'positive',
   } as const;
 }
@@ -1059,10 +1071,28 @@ export default function Home() {
     changeMode('idle');
   };
 
-  const coach = useMemo(
+  const coachCandidate = useMemo(
     () => createCoachFeedback(mode, metrics, inputState),
     [inputState, metrics, mode],
   );
+  const [coach, setCoach] = useState(coachCandidate);
+
+  useEffect(() => {
+    const shouldUpdateImmediately = mode !== 'live' || inputState !== 'good';
+    if (shouldUpdateImmediately) {
+      setCoach(coachCandidate);
+      return;
+    }
+
+    const timer = window.setTimeout(() => setCoach(coachCandidate), 700);
+    return () => window.clearTimeout(timer);
+  }, [
+    coachCandidate.label,
+    coachCandidate.message,
+    coachCandidate.tone,
+    inputState,
+    mode,
+  ]);
   const status = {
     idle: { text: '準備', className: 'status-ready' },
     requesting: { text: '許可待ち', className: 'status-waiting' },
@@ -1127,7 +1157,7 @@ export default function Home() {
               className={`coach-panel relative z-10 mt-6 flex flex-1 flex-col justify-center rounded-[10px] border p-5 sm:p-8 coach-${coach.tone}`}
             >
               <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-[#7dd3a5]">
+                <div className="coach-kicker flex items-center gap-2">
                   <Activity className="size-4" aria-hidden="true" />
                   <p className="text-xs font-bold">{coach.label}</p>
                 </div>
@@ -1147,7 +1177,7 @@ export default function Home() {
                 {waveform.map((height, index) => (
                   <span
                     key={index}
-                    className="wave-bar flex-1 rounded-sm bg-[#7dd3a5]"
+                    className="wave-bar flex-1 rounded-sm"
                     style={{
                       height: `${height}%`,
                     }}
