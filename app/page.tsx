@@ -5,13 +5,11 @@ import {
   Check,
   CircleAlert,
   Clock3,
-  Gauge,
   Mic,
   Pause,
   Play,
   RotateCcw,
   Square,
-  Volume2,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -405,6 +403,32 @@ function createCoachFeedback(
     message: 'そのまま続けて。',
     tone: 'positive',
   } as const;
+}
+
+function createSummaryHighlights(summary: SessionSummary) {
+  const good =
+    summary.stability >= 75
+      ? '声が安定'
+      : summary.energy >= 65
+        ? '声量をキープ'
+        : summary.pace >= 6 && summary.pace <= 8
+          ? '聞きやすいテンポ'
+          : summary.tension < 45
+            ? '落ち着いて話せた'
+            : '最後まで話し切れた';
+
+  const next =
+    summary.pace > 8
+      ? '文末で1秒止まる'
+      : summary.tension > 65
+        ? '最初の一文をゆっくり'
+        : summary.stability < 55
+          ? '一文ずつ区切って話す'
+          : summary.energy < 45
+            ? '大事な言葉だけ強く'
+            : '強調する前に一拍置く';
+
+  return { good, next };
 }
 
 function MetricCard({
@@ -1107,6 +1131,7 @@ export default function Home() {
     mode === 'live' ||
     mode === 'paused' ||
     mode === 'done';
+  const summaryHighlights = summary ? createSummaryHighlights(summary) : null;
 
   const tensionNote =
     metrics.tension < 36 ? '低い' : metrics.tension < 66 ? 'やや高い' : '高い';
@@ -1358,7 +1383,6 @@ export default function Home() {
             open
             aria-modal="true"
             aria-labelledby="summary-title"
-            aria-describedby="summary-description"
             onCancel={(event) => {
               event.preventDefault();
               setSummaryOpen(false);
@@ -1376,12 +1400,6 @@ export default function Home() {
                 >
                   練習結果
                 </h2>
-                <p
-                  id="summary-description"
-                  className="text-sm leading-6 text-muted-foreground"
-                >
-                  声の傾向をまとめました。
-                </p>
               </div>
             </div>
 
@@ -1410,32 +1428,18 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  <div className="summary-tip summary-good">
-                    <div>
-                      <Volume2 aria-hidden="true" />
-                      <span>よかった点</span>
+                {summaryHighlights && (
+                  <div className="summary-actions">
+                    <div className="summary-action summary-action-good">
+                      <span>よかった</span>
+                      <strong>{summaryHighlights.good}</strong>
                     </div>
-                    <p>
-                      {summary.energy >= 65
-                        ? '声の熱量が保たれ、聞き手を惹きつける時間がつくれていました。'
-                        : '落ち着いた声量で、丁寧に伝える土台ができています。'}
-                    </p>
-                  </div>
-                  <div className="summary-tip summary-next">
-                    <div>
-                      <Gauge aria-hidden="true" />
-                      <span>次のフォーカス</span>
+                    <div className="summary-action summary-action-next">
+                      <span>次に試す</span>
+                      <strong>{summaryHighlights.next}</strong>
                     </div>
-                    <p>
-                      {summary.pace > 8
-                        ? '結論の直前に1秒の間を入れ、聞き手が追いつく余白をつくりましょう。'
-                        : summary.tension > 65
-                          ? '話し始める前に長く息を吐き、最初の一文をゆっくり届けましょう。'
-                          : '強調したい言葉の前後に間を入れると、さらに印象が残ります。'}
-                    </p>
                   </div>
-                </div>
+                )}
 
                 <div className="mt-4 rounded-lg border border-border p-3 text-[11px] leading-5 text-muted-foreground">
                   録音データは保存していません。
