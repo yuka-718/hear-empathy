@@ -13,13 +13,7 @@ import {
   Square,
   Volume2,
 } from 'lucide-react';
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -90,6 +84,12 @@ type TensionEngine = {
   ) => number;
 };
 
+type IntensityFrame = {
+  decibels: number;
+  time: number;
+  voiced: boolean;
+};
+
 const DEFAULT_METRICS: VoiceMetrics = {
   tension: 32,
   energy: 68,
@@ -121,13 +121,38 @@ const median = (values: number[]) => {
     : (sorted[middle - 1] + sorted[middle]) / 2;
 };
 
+const percentile = (values: number[], ratio: number) => {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(clamp(ratio, 0, 1) * (sorted.length - 1))];
+};
+
 const deviation = (values: number[]) => {
   if (values.length < 2) return 0;
   const average = mean(values);
-  return Math.sqrt(
-    mean(values.map((value) => Math.pow(value - average, 2))),
-  );
+  return Math.sqrt(mean(values.map((value) => Math.pow(value - average, 2))));
 };
+
+const medianAbsoluteDeviation = (values: number[]) => {
+  if (values.length < 2) return 0;
+  const center = median(values);
+  return median(values.map((value) => Math.abs(value - center)));
+};
+
+const robustPositiveZ = (
+  value: number,
+  baselineValues: number[],
+  fallback: number,
+  minimumScale: number,
+) => {
+  const center = baselineValues.length ? median(baselineValues) : fallback;
+  const robustScale = baselineValues.length
+    ? medianAbsoluteDeviation(baselineValues) * 1.4826
+    : 0;
+  return Math.max(0, (value - center) / Math.max(minimumScale, robustScale));
+};
+
+const stressFromZ = (zScore: number) => clamp(30 + zScore * 24);
 
 const formatTime = (seconds: number) => {
   const minutes = Math.floor(seconds / 60)
@@ -164,47 +189,102 @@ function estimateMoraUnits(text: string) {
 
 function detectPitch(buffer: Float32Array, sampleRate: number) {
   let squareTotal = 0;
-  for (const sample of buffer) squareTotal += sample * sample;
+  let sampleTotal = 0;
+  for (const sample of buffer) {
+    squareTotal += sample * sample;
+    sampleTotal += sample;
+  }
   const rms = Math.sqrt(squareTotal / buffer.length);
-  if (rms < 0.012) return { pitch: null as number | null, confidence: 0 };
+  if (rms < 0.006) {
+    return { pitch: null as number | null, confidence: 0, jitter: null };
+  }
 
-  const minimumLag = Math.floor(sampleRate / 400);
+  const minimumLag = Math.floor(sampleRate / 500);
   const maximumLag = Math.min(
-    Math.floor(sampleRate / 70),
-    buffer.length - 2,
+    Math.floor(sampleRate / 60),
+    Math.floor(buffer.length / 2) - 1,
   );
-  let bestLag = 0;
-  let bestCorrelation = 0;
+  const differences = new Float32Array(maximumLag + 1);
+  const normalized = new Float32Array(maximumLag + 1);
 
+  for (let lag = 1; lag <= maximumLag; lag += 1) {
+    let difference = 0;
+    for (let index = 0; index < maximumLag; index += 1) {
+      const delta = buffer[index] - buffer[index + lag];
+      difference += delta * delta;
+    }
+    differences[lag] = difference;
+  }
+
+  normalized[0] = 1;
+  let runningSum = 0;
+  for (let lag = 1; lag <= maximumLag; lag += 1) {
+    runningSum += differences[lag];
+    normalized[lag] = runningSum ? (differences[lag] * lag) / runningSum : 1;
+  }
+
+  let candidate = 0;
   for (let lag = minimumLag; lag <= maximumLag; lag += 1) {
-    let correlation = 0;
-    let normA = 0;
-    let normB = 0;
-    const comparisonLength = buffer.length - lag;
-
-    for (let index = 0; index < comparisonLength; index += 1) {
-      const current = buffer[index];
-      const shifted = buffer[index + lag];
-      correlation += current * shifted;
-      normA += current * current;
-      normB += shifted * shifted;
-    }
-
-    const normalized = correlation / Math.sqrt(normA * normB + 1e-9);
-    if (normalized > bestCorrelation) {
-      bestCorrelation = normalized;
-      bestLag = lag;
+    if (normalized[lag] < 0.15) {
+      candidate = lag;
+      while (
+        candidate + 1 <= maximumLag &&
+        normalized[candidate + 1] < normalized[candidate]
+      ) {
+        candidate += 1;
+      }
+      break;
     }
   }
 
-  if (!bestLag || bestCorrelation < 0.58) {
-    return { pitch: null as number | null, confidence: bestCorrelation };
+  if (!candidate) {
+    let bestValue = 1;
+    for (let lag = minimumLag; lag <= maximumLag; lag += 1) {
+      if (normalized[lag] < bestValue) {
+        bestValue = normalized[lag];
+        candidate = lag;
+      }
+    }
   }
 
-  return {
-    pitch: sampleRate / bestLag,
-    confidence: bestCorrelation,
-  };
+  const confidence = candidate ? 1 - normalized[candidate] : 0;
+  if (!candidate || confidence < 0.7) {
+    return { pitch: null as number | null, confidence, jitter: null };
+  }
+
+  const left = normalized[Math.max(minimumLag, candidate - 1)];
+  const center = normalized[candidate];
+  const right = normalized[Math.min(maximumLag, candidate + 1)];
+  const denominator = left - 2 * center + right;
+  const refinedLag = denominator
+    ? candidate + (left - right) / (2 * denominator)
+    : candidate;
+
+  const bufferMean = sampleTotal / buffer.length;
+  const crossings: number[] = [];
+  for (let index = 1; index < buffer.length; index += 1) {
+    const previous = buffer[index - 1] - bufferMean;
+    const current = buffer[index] - bufferMean;
+    if (previous <= 0 && current > 0) {
+      const fraction = -previous / Math.max(1e-9, current - previous);
+      crossings.push(index - 1 + fraction);
+    }
+  }
+  const periods = crossings
+    .slice(1)
+    .map((crossing, index) => crossing - crossings[index])
+    .filter(
+      (period) => period >= refinedLag * 0.65 && period <= refinedLag * 1.35,
+    );
+  const periodChanges = periods
+    .slice(1)
+    .map((period, index) => Math.abs(period - periods[index]));
+  const jitter =
+    periodChanges.length >= 2
+      ? mean(periodChanges) / Math.max(1e-9, mean(periods))
+      : null;
+
+  return { pitch: sampleRate / refinedLag, confidence, jitter };
 }
 
 function createCoachFeedback(
@@ -357,12 +437,9 @@ function MetricCard({
 
 export default function Home() {
   const [mode, setMode] = useState<SessionMode>('idle');
-  const [metrics, setMetrics] =
-    useState<VoiceMetrics>(DEFAULT_METRICS);
+  const [metrics, setMetrics] = useState<VoiceMetrics>(DEFAULT_METRICS);
   const [waveform, setWaveform] = useState<number[]>(
-    Array.from({ length: 28 }, (_, index) =>
-      24 + ((index * 19) % 52),
-    ),
+    Array.from({ length: 28 }, (_, index) => 24 + ((index * 19) % 52)),
   );
   const [elapsed, setElapsed] = useState(0);
   const [inputState, setInputState] = useState<InputState>('ready');
@@ -382,11 +459,18 @@ export default function Home() {
   const lastAnalysisAtRef = useRef(0);
   const lastVoiceAtRef = useRef(0);
   const lastPeakAtRef = useRef(0);
-  const lastRmsRef = useRef(0);
   const lastSampleAtRef = useRef(0);
   const pitchHistoryRef = useRef<number[]>([]);
+  const pitchConfidenceRef = useRef<number[]>([]);
+  const jitterHistoryRef = useRef<number[]>([]);
   const baselinePitchRef = useRef<number[]>([]);
+  const baselineVolumeRef = useRef<number[]>([]);
+  const baselinePaceRef = useRef<number[]>([]);
+  const baselineJitterRef = useRef<number[]>([]);
+  const baselineVoiceRatioRef = useRef<number[]>([]);
   const volumeHistoryRef = useRef<number[]>([]);
+  const noiseHistoryRef = useRef<number[]>([]);
+  const intensityFramesRef = useRef<IntensityFrame[]>([]);
   const peakTimesRef = useRef<number[]>([]);
   const voiceWindowRef = useRef<boolean[]>([]);
   const samplesRef = useRef<VoiceMetrics[]>([]);
@@ -435,11 +519,18 @@ export default function Home() {
     setSummary(null);
     samplesRef.current = [];
     pitchHistoryRef.current = [];
+    pitchConfidenceRef.current = [];
+    jitterHistoryRef.current = [];
     baselinePitchRef.current = [];
+    baselineVolumeRef.current = [];
+    baselinePaceRef.current = [];
+    baselineJitterRef.current = [];
+    baselineVoiceRatioRef.current = [];
     volumeHistoryRef.current = [];
+    noiseHistoryRef.current = [];
+    intensityFramesRef.current = [];
     peakTimesRef.current = [];
     voiceWindowRef.current = [];
-    lastRmsRef.current = 0;
     lastPeakAtRef.current = 0;
     lastSampleAtRef.current = 0;
   }, []);
@@ -450,8 +541,7 @@ export default function Home() {
       webkitSpeechRecognition?: SpeechRecognitionConstructor;
     };
     const Recognition =
-      browserWindow.SpeechRecognition ??
-      browserWindow.webkitSpeechRecognition;
+      browserWindow.SpeechRecognition ?? browserWindow.webkitSpeechRecognition;
 
     if (!Recognition) {
       return;
@@ -626,7 +716,18 @@ export default function Home() {
 
         const rms = Math.sqrt(squareTotal / audioBuffer.length);
         const decibels = 20 * Math.log10(rms + 1e-8);
-        const speaking = rms > 0.011;
+        if (decibels > -90) {
+          noiseHistoryRef.current.push(decibels);
+          if (noiseHistoryRef.current.length > 120)
+            noiseHistoryRef.current.shift();
+        }
+        const noiseFloor = noiseHistoryRef.current.length
+          ? percentile(noiseHistoryRef.current, 0.2)
+          : -60;
+        const speaking = decibels > Math.max(-52, noiseFloor + 8);
+        const pitchResult = detectPitch(audioBuffer, audioContext.sampleRate);
+        const voiced =
+          pitchResult.pitch !== null && pitchResult.confidence >= 0.7;
 
         voiceWindowRef.current.push(speaking);
         if (voiceWindowRef.current.length > 60) voiceWindowRef.current.shift();
@@ -639,47 +740,65 @@ export default function Home() {
           }
         }
 
-        if (
-          speaking &&
-          rms > 0.015 &&
-          rms > lastRmsRef.current * 1.08 &&
-          now - lastPeakAtRef.current > 80
-        ) {
-          peakTimesRef.current.push(now);
-          lastPeakAtRef.current = now;
+        intensityFramesRef.current.push({ decibels, time: now, voiced });
+        if (intensityFramesRef.current.length > 7) {
+          intensityFramesRef.current.shift();
         }
-        lastRmsRef.current = rms;
+        const frames = intensityFramesRef.current;
+        if (frames.length >= 5) {
+          const candidate = frames[frames.length - 3];
+          const before = Math.min(
+            frames[frames.length - 5].decibels,
+            frames[frames.length - 4].decibels,
+          );
+          const after = Math.min(
+            frames[frames.length - 2].decibels,
+            frames[frames.length - 1].decibels,
+          );
+          if (
+            candidate.voiced &&
+            candidate.decibels - before >= 1.5 &&
+            candidate.decibels - after >= 1.5 &&
+            candidate.time - lastPeakAtRef.current >= 100
+          ) {
+            peakTimesRef.current.push(candidate.time);
+            lastPeakAtRef.current = candidate.time;
+          }
+        }
         peakTimesRef.current = peakTimesRef.current.filter(
           (time) => now - time < 10_000,
         );
 
-        const pitchResult = detectPitch(audioBuffer, audioContext.sampleRate);
         if (pitchResult.pitch) {
           pitchHistoryRef.current.push(pitchResult.pitch);
+          pitchConfidenceRef.current.push(pitchResult.confidence);
+          if (pitchResult.jitter !== null) {
+            jitterHistoryRef.current.push(pitchResult.jitter);
+          }
           if (pitchHistoryRef.current.length > 24) {
             pitchHistoryRef.current.shift();
           }
-
-          if (now - analysisStartedAtRef.current < 5_000) {
-            baselinePitchRef.current.push(pitchResult.pitch);
-            if (baselinePitchRef.current.length > 50) {
-              baselinePitchRef.current.shift();
-            }
+          if (pitchConfidenceRef.current.length > 24) {
+            pitchConfidenceRef.current.shift();
+          }
+          if (jitterHistoryRef.current.length > 16) {
+            jitterHistoryRef.current.shift();
           }
         }
 
         if (
           modeRef.current === 'calibrating' &&
-          now - analysisStartedAtRef.current > 3_200
+          now - analysisStartedAtRef.current > 4_500
         ) {
           changeMode('live');
         }
 
         const pitchValues = pitchHistoryRef.current;
         const pitchAverage = mean(pitchValues);
-        const jitter = pitchAverage
-          ? deviation(pitchValues) / pitchAverage
-          : metricsRef.current.jitter;
+        const jitter =
+          jitterHistoryRef.current.length >= 3
+            ? median(jitterHistoryRef.current)
+            : metricsRef.current.jitter;
         const baselinePitch =
           median(baselinePitchRef.current) ||
           pitchResult.pitch ||
@@ -707,39 +826,81 @@ export default function Home() {
           1,
           (now - analysisStartedAtRef.current) / 1000,
         );
-        const transcriptPace = clamp(
-          transcriptUnits / sessionSeconds,
-          0,
-          12,
-        );
+        const transcriptPace = clamp(transcriptUnits / sessionSeconds, 0, 12);
         const pace =
           transcriptUnits >= 12
-            ? transcriptPace * 0.68 + acousticPace * 0.32
+            ? transcriptPace * 0.4 + acousticPace * 0.6
             : acousticPace;
 
         const voiceRatio =
           voiceWindowRef.current.filter(Boolean).length /
           Math.max(1, voiceWindowRef.current.length);
-        const paceStress = clamp(28 + (pace - 6) * 14);
-        const pitchStress = clamp(
-          34 + Math.max(0, semitoneShift) * 13 + jitter * 260,
+
+        const calibrating = now - analysisStartedAtRef.current <= 4_500;
+        if (calibrating && speaking) {
+          baselineVolumeRef.current.push(decibels);
+          baselineVoiceRatioRef.current.push(voiceRatio);
+          if (pitchResult.pitch)
+            baselinePitchRef.current.push(pitchResult.pitch);
+          if (pitchValues.length >= 4) baselineJitterRef.current.push(jitter);
+          if (now - analysisStartedAtRef.current >= 2_000 && pace > 0) {
+            baselinePaceRef.current.push(pace);
+          }
+        }
+
+        const baselineVolume = baselineVolumeRef.current.length
+          ? median(baselineVolumeRef.current)
+          : -24;
+        const baselinePace = baselinePaceRef.current.length
+          ? median(baselinePaceRef.current)
+          : 7.2;
+        const baselineJitter = baselineJitterRef.current.length
+          ? median(baselineJitterRef.current)
+          : 0.015;
+        const baselineVoiceRatio = baselineVoiceRatioRef.current.length
+          ? median(baselineVoiceRatioRef.current)
+          : 0.68;
+
+        const paceStress = stressFromZ(
+          robustPositiveZ(pace, baselinePaceRef.current, baselinePace, 1.2),
         );
-        const jitterStress = clamp(jitter * 720);
-        const pauseStress = clamp(28 + Math.max(0, voiceRatio - 0.68) * 160);
-        const volumeStress = clamp(
-          decibels > -13
-            ? 58 + (decibels + 13) * 5
-            : decibels < -39
-              ? 48 + (-39 - decibels) * 2
-              : 28,
+        const baselineSemitones = baselinePitchRef.current.map(
+          (pitch) => 12 * Math.log2(pitch / baselinePitch),
+        );
+        const pitchStress = stressFromZ(
+          robustPositiveZ(semitoneShift, baselineSemitones, 0, 1.5),
+        );
+        const jitterStress = stressFromZ(
+          robustPositiveZ(
+            jitter,
+            baselineJitterRef.current,
+            baselineJitter,
+            0.006,
+          ),
+        );
+        const pauseStress = stressFromZ(
+          robustPositiveZ(
+            voiceRatio,
+            baselineVoiceRatioRef.current,
+            baselineVoiceRatio,
+            0.12,
+          ),
+        );
+        const volumeStress = stressFromZ(
+          robustPositiveZ(
+            decibels,
+            baselineVolumeRef.current,
+            baselineVolume,
+            3,
+          ),
         );
 
         const fallbackTension =
-          paceStress * 0.3 +
-          pitchStress * 0.25 +
-          jitterStress * 0.2 +
-          pauseStress * 0.15 +
-          volumeStress * 0.1;
+          paceStress * 0.15 +
+          pitchStress * 0.4 +
+          jitterStress * 0.05 +
+          pauseStress * 0.1 +
+          volumeStress * 0.3;
         const rawTension = clamp(
           tensionEngineRef.current?.score(
             paceStress,
@@ -750,18 +911,28 @@ export default function Home() {
           ) ?? fallbackTension,
         );
         const rawEnergy = clamp(
-          45 + (decibels + 30) * 1.65 + pitchRange * 80,
+          55 + (decibels - baselineVolume) * 3 + pitchRange * 70,
           12,
           96,
         );
         const rawStability = clamp(
-          95 - jitter * 540 - deviation(volumeHistoryRef.current) * 1.7,
+          96 -
+            jitter * 900 -
+            deviation(volumeHistoryRef.current) * 1.8 -
+            (1 - mean(pitchConfidenceRef.current)) * 18,
           18,
           98,
         );
+        const signalToNoise = decibels - noiseFloor;
+        const signalQuality = clamp(((signalToNoise - 6) / 24) * 100);
+        const pitchCoverage = clamp((pitchValues.length / 16) * 100);
         const rawConfidence = speaking
-          ? clamp(52 + pitchResult.confidence * 47)
-          : metricsRef.current.confidence;
+          ? clamp(
+              pitchResult.confidence * 55 +
+                signalQuality * 0.3 +
+                pitchCoverage * 0.15,
+            )
+          : 18;
 
         const previous = metricsRef.current;
         const smooth = (current: number, next: number, weight = 0.22) =>
@@ -779,7 +950,11 @@ export default function Home() {
             : previous.stability,
           confidence: smooth(previous.confidence, rawConfidence, 0.2),
           pitch: pitchResult.pitch
-            ? smooth(previous.pitch ?? pitchResult.pitch, pitchResult.pitch, 0.22)
+            ? smooth(
+                previous.pitch ?? pitchResult.pitch,
+                pitchResult.pitch,
+                0.22,
+              )
             : previous.pitch,
           jitter: smooth(previous.jitter, jitter, 0.2),
           volume: smooth(previous.volume, decibels, 0.25),
@@ -897,25 +1072,18 @@ export default function Home() {
     done: { text: '完了', className: 'status-ready' },
     error: { text: '要確認', className: 'status-error' },
   }[mode];
+  const hasMeasurement =
+    mode === 'calibrating' ||
+    mode === 'live' ||
+    mode === 'paused' ||
+    mode === 'done';
 
   const tensionNote =
-    metrics.tension < 36
-      ? '低い'
-      : metrics.tension < 66
-        ? 'やや高い'
-        : '高い';
+    metrics.tension < 36 ? '低い' : metrics.tension < 66 ? 'やや高い' : '高い';
   const energyNote =
-    metrics.energy >= 72
-      ? '高い'
-      : metrics.energy >= 45
-        ? '標準'
-        : '低い';
+    metrics.energy >= 72 ? '高い' : metrics.energy >= 45 ? '標準' : '低い';
   const paceNote =
-    metrics.pace > 8
-      ? '速め'
-      : metrics.pace < 6
-        ? 'ゆっくり'
-        : '標準';
+    metrics.pace > 8 ? '速め' : metrics.pace < 6 ? 'ゆっくり' : '標準';
 
   return (
     <main className="min-h-screen overflow-hidden bg-background text-foreground">
@@ -924,7 +1092,9 @@ export default function Home() {
         className="mx-auto max-w-[1260px] px-5 py-6 lg:px-8 lg:py-8"
       >
         <section className="mb-4">
-          <h1 className="text-xl font-bold tracking-[-0.03em] sm:text-2xl">プレゼン練習</h1>
+          <h1 className="text-xl font-bold tracking-[-0.03em] sm:text-2xl">
+            プレゼン練習
+          </h1>
         </section>
 
         <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_330px]">
@@ -934,13 +1104,17 @@ export default function Home() {
             <div className="relative z-10 flex items-center justify-between">
               <h2 className="text-lg font-semibold">コーチ</h2>
               <div className="flex items-center gap-2">
-                {(mode === 'live' || mode === 'calibrating' || mode === 'paused') && (
+                {(mode === 'live' ||
+                  mode === 'calibrating' ||
+                  mode === 'paused') && (
                   <span className="hidden items-center gap-1.5 font-mono text-xs text-white/55 sm:flex">
                     <Clock3 className="size-3.5" aria-hidden="true" />
                     {formatTime(elapsed)}
                   </span>
                 )}
-                <Badge className={`session-status h-7 gap-1.5 rounded-md px-2.5 ${status.className}`}>
+                <Badge
+                  className={`session-status h-7 gap-1.5 rounded-md px-2.5 ${status.className}`}
+                >
                   <span className="status-light size-1.5 rounded-full" />
                   {status.text}
                 </Badge>
@@ -959,7 +1133,7 @@ export default function Home() {
                 </div>
                 {mode === 'live' && (
                   <span className="text-[10px] font-medium text-white/40">
-                    精度 {round(metrics.confidence)}%
+                    解析品質 {round(metrics.confidence)}%
                   </span>
                 )}
               </div>
@@ -984,7 +1158,10 @@ export default function Home() {
 
             {errorMessage && (
               <div className="relative z-10 mt-4 flex gap-3 rounded-lg border border-[#dc5a4f]/40 bg-[#dc5a4f]/10 p-4 text-sm leading-6 text-white/80">
-                <CircleAlert className="mt-0.5 size-4 shrink-0 text-[#ff9d93]" aria-hidden="true" />
+                <CircleAlert
+                  className="mt-0.5 size-4 shrink-0 text-[#ff9d93]"
+                  aria-hidden="true"
+                />
                 <p>{errorMessage}</p>
               </div>
             )}
@@ -997,7 +1174,9 @@ export default function Home() {
                   className="h-11 rounded-lg bg-[#2869d8] px-5 text-sm font-bold text-white hover:bg-[#1f5cbe]"
                 >
                   <Mic className="size-4" aria-hidden="true" />
-                  {mode === 'error' ? 'マイクを再試行' : 'マイクをオンにして練習'}
+                  {mode === 'error'
+                    ? 'マイクを再試行'
+                    : 'マイクをオンにして練習'}
                 </Button>
               )}
 
@@ -1029,7 +1208,10 @@ export default function Home() {
                     onClick={finishSession}
                     className="h-11 rounded-lg px-5 text-white/70 hover:bg-white/10 hover:text-white"
                   >
-                    <Square className="size-3.5 fill-current" aria-hidden="true" />
+                    <Square
+                      className="size-3.5 fill-current"
+                      aria-hidden="true"
+                    />
                     終了
                   </Button>
                 </>
@@ -1051,7 +1233,10 @@ export default function Home() {
                     onClick={finishSession}
                     className="h-11 rounded-lg px-5 text-white/70 hover:bg-white/10 hover:text-white"
                   >
-                    <Square className="size-3.5 fill-current" aria-hidden="true" />
+                    <Square
+                      className="size-3.5 fill-current"
+                      aria-hidden="true"
+                    />
                     終了
                   </Button>
                 </>
@@ -1065,28 +1250,28 @@ export default function Home() {
           >
             <MetricCard
               label="緊張サイン"
-              value={round(metrics.tension)}
-              unit="/100"
-              note={tensionNote}
-              progress={metrics.tension}
+              value={hasMeasurement ? round(metrics.tension) : '—'}
+              unit={hasMeasurement ? '/100' : ''}
+              note={hasMeasurement ? tensionNote : '待機'}
+              progress={hasMeasurement ? metrics.tension : 0}
               color="bg-[#dc5a4f]"
               track="bg-[#eceef1]"
             />
             <MetricCard
               label="声の熱量"
-              value={round(metrics.energy)}
-              unit="/100"
-              note={energyNote}
-              progress={metrics.energy}
+              value={hasMeasurement ? round(metrics.energy) : '—'}
+              unit={hasMeasurement ? '/100' : ''}
+              note={hasMeasurement ? energyNote : '待機'}
+              progress={hasMeasurement ? metrics.energy : 0}
               color="bg-[#2869d8]"
               track="bg-[#eceef1]"
             />
             <MetricCard
               label="話すテンポ"
-              value={metrics.pace.toFixed(1)}
-              unit="モーラ/秒・推定"
-              note={paceNote}
-              progress={(metrics.pace / 10) * 100}
+              value={hasMeasurement ? metrics.pace.toFixed(1) : '—'}
+              unit={hasMeasurement ? 'モーラ/秒・推定' : ''}
+              note={hasMeasurement ? paceNote : '待機'}
+              progress={hasMeasurement ? (metrics.pace / 10) * 100 : 0}
               color="bg-[#3c8b61]"
               track="bg-[#eceef1]"
             />
@@ -1094,31 +1279,47 @@ export default function Home() {
             <div className="diagnostic-card sm:col-span-3 lg:col-span-1">
               <div className="mb-4 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Activity className="size-4 text-[#2869d8]" aria-hidden="true" />
+                  <Activity
+                    className="size-4 text-[#2869d8]"
+                    aria-hidden="true"
+                  />
                   <p className="text-xs font-bold">詳細</p>
                 </div>
                 <span className="text-[10px] font-semibold text-muted-foreground">
-                  {mode === 'idle' ? '待機' : '計測中'}
+                  {mode === 'live' || mode === 'calibrating'
+                    ? '計測中'
+                    : mode === 'paused'
+                      ? '停止中'
+                      : mode === 'done'
+                        ? '完了'
+                        : '待機'}
                 </span>
               </div>
               <dl className="grid grid-cols-3 gap-2">
                 <div>
                   <dt>F0</dt>
-                  <dd>{metrics.pitch ? `${round(metrics.pitch)} Hz` : '—'}</dd>
+                  <dd>
+                    {hasMeasurement && metrics.pitch
+                      ? `${round(metrics.pitch)} Hz`
+                      : '—'}
+                  </dd>
                 </div>
                 <div>
                   <dt>揺らぎ</dt>
-                  <dd>{(metrics.jitter * 100).toFixed(1)}%</dd>
+                  <dd>
+                    {hasMeasurement
+                      ? `${(metrics.jitter * 100).toFixed(1)}%`
+                      : '—'}
+                  </dd>
                 </div>
                 <div>
                   <dt>安定度</dt>
-                  <dd>{round(metrics.stability)}</dd>
+                  <dd>{hasMeasurement ? round(metrics.stability) : '—'}</dd>
                 </div>
               </dl>
             </div>
           </aside>
         </section>
-
       </div>
 
       {summaryOpen && (
@@ -1134,65 +1335,100 @@ export default function Home() {
             }}
             className="summary-dialog max-h-[calc(100vh-2rem)] w-[min(620px,calc(100%-2rem))] overflow-y-auto rounded-[12px] p-0"
           >
-          <div className="summary-hero">
-            <div className="summary-check">
-              <Check className="size-5" strokeWidth={3} aria-hidden="true" />
-            </div>
-            <div className="flex flex-col gap-2">
-              <h2 id="summary-title" className="text-2xl font-bold tracking-[-0.04em]">
-                練習結果
-              </h2>
-              <p id="summary-description" className="text-sm leading-6 text-muted-foreground">
-                声の傾向をまとめました。
-              </p>
-            </div>
-          </div>
-
-          {summary && (
-            <div className="px-5 pb-1 sm:px-7">
-              <div className="summary-grid">
-                <div><span>平均緊張度</span><strong>{summary.tension}</strong><small>/100</small></div>
-                <div><span>声の熱量</span><strong>{summary.energy}</strong><small>/100</small></div>
-                <div><span>平均テンポ</span><strong>{summary.pace}</strong><small>モーラ/秒</small></div>
-                <div><span>練習時間</span><strong>{formatTime(summary.duration)}</strong><small>min</small></div>
+            <div className="summary-hero">
+              <div className="summary-check">
+                <Check className="size-5" strokeWidth={3} aria-hidden="true" />
               </div>
+              <div className="flex flex-col gap-2">
+                <h2
+                  id="summary-title"
+                  className="text-2xl font-bold tracking-[-0.04em]"
+                >
+                  練習結果
+                </h2>
+                <p
+                  id="summary-description"
+                  className="text-sm leading-6 text-muted-foreground"
+                >
+                  声の傾向をまとめました。
+                </p>
+              </div>
+            </div>
 
-              <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                <div className="summary-tip summary-good">
-                  <div><Volume2 aria-hidden="true" /><span>よかった点</span></div>
-                  <p>
-                    {summary.energy >= 65
-                      ? '声の熱量が保たれ、聞き手を惹きつける時間がつくれていました。'
-                      : '落ち着いた声量で、丁寧に伝える土台ができています。'}
-                  </p>
+            {summary && (
+              <div className="px-5 pb-1 sm:px-7">
+                <div className="summary-grid">
+                  <div>
+                    <span>平均緊張度</span>
+                    <strong>{summary.tension}</strong>
+                    <small>/100</small>
+                  </div>
+                  <div>
+                    <span>声の熱量</span>
+                    <strong>{summary.energy}</strong>
+                    <small>/100</small>
+                  </div>
+                  <div>
+                    <span>平均テンポ</span>
+                    <strong>{summary.pace}</strong>
+                    <small>モーラ/秒</small>
+                  </div>
+                  <div>
+                    <span>練習時間</span>
+                    <strong>{formatTime(summary.duration)}</strong>
+                    <small>min</small>
+                  </div>
                 </div>
-                <div className="summary-tip summary-next">
-                  <div><Gauge aria-hidden="true" /><span>次のフォーカス</span></div>
-                  <p>
-                    {summary.pace > 8
-                      ? '結論の直前に1秒の間を入れ、聞き手が追いつく余白をつくりましょう。'
-                      : summary.tension > 65
-                        ? '話し始める前に長く息を吐き、最初の一文をゆっくり届けましょう。'
-                        : '強調したい言葉の前後に間を入れると、さらに印象が残ります。'}
-                  </p>
+
+                <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                  <div className="summary-tip summary-good">
+                    <div>
+                      <Volume2 aria-hidden="true" />
+                      <span>よかった点</span>
+                    </div>
+                    <p>
+                      {summary.energy >= 65
+                        ? '声の熱量が保たれ、聞き手を惹きつける時間がつくれていました。'
+                        : '落ち着いた声量で、丁寧に伝える土台ができています。'}
+                    </p>
+                  </div>
+                  <div className="summary-tip summary-next">
+                    <div>
+                      <Gauge aria-hidden="true" />
+                      <span>次のフォーカス</span>
+                    </div>
+                    <p>
+                      {summary.pace > 8
+                        ? '結論の直前に1秒の間を入れ、聞き手が追いつく余白をつくりましょう。'
+                        : summary.tension > 65
+                          ? '話し始める前に長く息を吐き、最初の一文をゆっくり届けましょう。'
+                          : '強調したい言葉の前後に間を入れると、さらに印象が残ります。'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-border p-3 text-[11px] leading-5 text-muted-foreground">
+                  録音データは保存していません。
                 </div>
               </div>
+            )}
 
-              <div className="mt-4 rounded-lg border border-border p-3 text-[11px] leading-5 text-muted-foreground">
-                録音データは保存していません。
-              </div>
+            <div className="mt-3 flex flex-col-reverse gap-2 rounded-b-[12px] border-t bg-muted/50 px-5 py-4 sm:flex-row sm:justify-end sm:px-7">
+              <Button
+                variant="outline"
+                onClick={() => setSummaryOpen(false)}
+                className="rounded-lg"
+              >
+                画面に戻る
+              </Button>
+              <Button
+                onClick={resetSession}
+                className="rounded-lg bg-[#171a1f] px-5 text-white hover:bg-[#2d3137]"
+              >
+                <RotateCcw className="size-4" aria-hidden="true" />
+                もう一度練習
+              </Button>
             </div>
-          )}
-
-          <div className="mt-3 flex flex-col-reverse gap-2 rounded-b-[12px] border-t bg-muted/50 px-5 py-4 sm:flex-row sm:justify-end sm:px-7">
-            <Button variant="outline" onClick={() => setSummaryOpen(false)} className="rounded-lg">
-              画面に戻る
-            </Button>
-            <Button onClick={resetSession} className="rounded-lg bg-[#171a1f] px-5 text-white hover:bg-[#2d3137]">
-              <RotateCcw className="size-4" aria-hidden="true" />
-              もう一度練習
-            </Button>
-          </div>
           </dialog>
         </div>
       )}

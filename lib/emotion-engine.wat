@@ -10,21 +10,21 @@
     (param $volume f32)
     (result f32)
     local.get $pace
-    f32.const 0.30
+    f32.const 0.15
     f32.mul
     local.get $pitch
-    f32.const 0.25
+    f32.const 0.40
     f32.mul
     f32.add
     local.get $jitter
-    f32.const 0.20
+    f32.const 0.05
     f32.mul
     f32.add
     local.get $pause
-    f32.const 0.15
+    f32.const 0.10
     f32.mul
     f32.add
     local.get $volume
-    f32.const 0.10
+    f32.const 0.30
     f32.mul
     f32.add))
