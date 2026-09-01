@@ -84,8 +84,8 @@ type TensionEngine = {
 
 type IntensityFrame = {
   decibels: number;
+  speaking: boolean;
   time: number;
-  voiced: boolean;
 };
 
 const DEFAULT_METRICS: VoiceMetrics = {
@@ -362,7 +362,7 @@ function createCoachFeedback(
     } as const;
   }
 
-  if (metrics.pace >= 8.5) {
+  if (metrics.pace >= 8) {
     return {
       label: '少し速め',
       message: '文末で、一拍置いてみて。',
@@ -565,6 +565,7 @@ export default function Home() {
   const peakTimesRef = useRef<number[]>([]);
   const voiceWindowRef = useRef<boolean[]>([]);
   const samplesRef = useRef<VoiceMetrics[]>([]);
+  const committedTranscriptRef = useRef('');
   const transcriptRef = useRef('');
   const tensionEngineRef = useRef<TensionEngine | null>(null);
 
@@ -606,6 +607,7 @@ export default function Home() {
     metricsRef.current = DEFAULT_METRICS;
     setInputState('ready');
     setErrorMessage('');
+    committedTranscriptRef.current = '';
     transcriptRef.current = '';
     setSummary(null);
     samplesRef.current = [];
@@ -645,6 +647,7 @@ export default function Home() {
 
     recognition.onresult = (event) => {
       let finalText = '';
+      let interimText = '';
 
       for (
         let resultIndex = event.resultIndex;
@@ -657,8 +660,19 @@ export default function Home() {
       }
 
       if (finalText) {
-        transcriptRef.current = `${transcriptRef.current}${finalText}`;
+        committedTranscriptRef.current = `${committedTranscriptRef.current}${finalText}`;
       }
+
+      for (
+        let resultIndex = 0;
+        resultIndex < event.results.length;
+        resultIndex += 1
+      ) {
+        const result = event.results[resultIndex];
+        if (!result.isFinal) interimText += result[0]?.transcript ?? '';
+      }
+
+      transcriptRef.current = `${committedTranscriptRef.current}${interimText}`;
     };
 
     recognition.onend = () => {
@@ -817,11 +831,8 @@ export default function Home() {
           : -60;
         const speaking = decibels > Math.max(-52, noiseFloor + 8);
         const pitchResult = detectPitch(audioBuffer, audioContext.sampleRate);
-        const voiced =
-          pitchResult.pitch !== null && pitchResult.confidence >= 0.7;
-
         voiceWindowRef.current.push(speaking);
-        if (voiceWindowRef.current.length > 60) voiceWindowRef.current.shift();
+        if (voiceWindowRef.current.length > 72) voiceWindowRef.current.shift();
 
         if (speaking) {
           lastVoiceAtRef.current = now;
@@ -831,7 +842,7 @@ export default function Home() {
           }
         }
 
-        intensityFramesRef.current.push({ decibels, time: now, voiced });
+        intensityFramesRef.current.push({ decibels, speaking, time: now });
         if (intensityFramesRef.current.length > 7) {
           intensityFramesRef.current.shift();
         }
@@ -847,17 +858,17 @@ export default function Home() {
             frames[frames.length - 1].decibels,
           );
           if (
-            candidate.voiced &&
-            candidate.decibels - before >= 1.5 &&
-            candidate.decibels - after >= 1.5 &&
-            candidate.time - lastPeakAtRef.current >= 100
+            candidate.speaking &&
+            candidate.decibels - before >= 0.8 &&
+            candidate.decibels - after >= 0.8 &&
+            candidate.time - lastPeakAtRef.current >= 75
           ) {
             peakTimesRef.current.push(candidate.time);
             lastPeakAtRef.current = candidate.time;
           }
         }
         peakTimesRef.current = peakTimesRef.current.filter(
-          (time) => now - time < 10_000,
+          (time) => now - time < 6_500,
         );
 
         if (pitchResult.pitch) {
@@ -903,12 +914,16 @@ export default function Home() {
             Math.max(1, pitchAverage)
           : 0;
 
+        const voiceRatio =
+          voiceWindowRef.current.filter(Boolean).length /
+          Math.max(1, voiceWindowRef.current.length);
         const acousticWindow = Math.max(
-          4,
-          Math.min(10, (now - analysisStartedAtRef.current) / 1000),
+          3,
+          Math.min(6.5, (now - analysisStartedAtRef.current) / 1000),
         );
         const acousticPace = clamp(
-          peakTimesRef.current.length / acousticWindow,
+          peakTimesRef.current.length /
+            (acousticWindow * clamp(voiceRatio, 0.72, 1)),
           0,
           12,
         );
@@ -917,15 +932,15 @@ export default function Home() {
           1,
           (now - analysisStartedAtRef.current) / 1000,
         );
-        const transcriptPace = clamp(transcriptUnits / sessionSeconds, 0, 12);
+        const transcriptPace = clamp(
+          transcriptUnits / (sessionSeconds * clamp(voiceRatio, 0.72, 1)),
+          0,
+          12,
+        );
         const pace =
-          transcriptUnits >= 12
-            ? transcriptPace * 0.4 + acousticPace * 0.6
+          transcriptUnits >= 6
+            ? transcriptPace * 0.55 + acousticPace * 0.45
             : acousticPace;
-
-        const voiceRatio =
-          voiceWindowRef.current.filter(Boolean).length /
-          Math.max(1, voiceWindowRef.current.length);
 
         const calibrating = now - analysisStartedAtRef.current <= 4_500;
         if (calibrating && speaking) {
@@ -1035,7 +1050,7 @@ export default function Home() {
           energy: speaking
             ? smooth(previous.energy, rawEnergy, 0.2)
             : smooth(previous.energy, 22, 0.08),
-          pace: smooth(previous.pace, pace, 0.18),
+          pace: smooth(previous.pace, pace, 0.28),
           stability: speaking
             ? smooth(previous.stability, rawStability, 0.16)
             : previous.stability,
